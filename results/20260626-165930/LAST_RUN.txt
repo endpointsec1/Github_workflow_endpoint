@@ -1,6 +1,0 @@
-time=Fri Jun 26 16:59:30 UTC 2026
-repo=endpointsec1/Github_workflow_endpoint
-commit=d8abe4057b837c0cae8b49024bc65b7a2687597c
-status=FAIL
-actor=endpointsec1
-event=workflow_dispatch
