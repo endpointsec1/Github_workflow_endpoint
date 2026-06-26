@@ -1,0 +1,78 @@
+{
+  "name": "Daily Customer Sync (CLEAN TEST FIXTURE)",
+  "nodes": [
+    {
+      "name": "Every Morning Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 24 }] }
+      }
+    },
+    {
+      "name": "Fetch Customer Records (Airtable)",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": {
+        "operation": "search",
+        "base": "={{ $env.AIRTABLE_BASE_ID }}"
+      },
+      "credentials": { "airtableApi": { "id": "1", "name": "Airtable account" } },
+      "retryOnFail": true
+    },
+    {
+      "name": "Enrich via Internal API",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://internal.example.com/enrich",
+        "authentication": "predefinedCredentialType",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "={{ $credentials.internalApi.token }}" }
+          ]
+        }
+      },
+      "credentials": { "httpHeaderAuth": { "id": "2", "name": "Internal API" } },
+      "retryOnFail": true,
+      "continueOnFail": true
+    },
+    {
+      "name": "Upsert Customers (Postgres)",
+      "type": "n8n-nodes-base.postgres",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO customers (id, payload) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload"
+      },
+      "credentials": { "postgres": { "id": "3", "name": "Postgres - Reporting" } },
+      "retryOnFail": true,
+      "continueOnFail": true
+    },
+    {
+      "name": "Notify Ops on Success (Slack)",
+      "type": "n8n-nodes-base.slack",
+      "parameters": {
+        "operation": "post",
+        "channel": "={{ $env.OPS_SLACK_CHANNEL }}",
+        "text": "Daily customer sync completed."
+      },
+      "credentials": { "slackApi": { "id": "4", "name": "Slack - Ops" } },
+      "retryOnFail": true,
+      "continueOnFail": true
+    }
+  ],
+  "connections": {
+    "Every Morning Trigger": {
+      "main": [[{ "node": "Fetch Customer Records (Airtable)", "type": "main", "index": 0 }]]
+    },
+    "Fetch Customer Records (Airtable)": {
+      "main": [[{ "node": "Enrich via Internal API", "type": "main", "index": 0 }]]
+    },
+    "Enrich via Internal API": {
+      "main": [[{ "node": "Upsert Customers (Postgres)", "type": "main", "index": 0 }]]
+    },
+    "Upsert Customers (Postgres)": {
+      "main": [[{ "node": "Notify Ops on Success (Slack)", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "errorWorkflow": "error-handler-workflow-id-001"
+  }
+}
