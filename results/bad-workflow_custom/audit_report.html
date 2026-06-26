@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>n8n Workflow Audit Report -- Customer Intake &amp; Enrichment (INSECURE TEST FIXTURE)</title>
+<style>:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+       margin: 0; background: #f7f8fa; color: #1f2328; }
+header { background: linear-gradient(135deg,#0d1117,#1f2937); color: #fff; padding: 24px 32px; }
+header h1 { margin: 0 0 4px; font-size: 22px; }
+header .sub { opacity: .8; font-size: 13px; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 32px 80px; }
+section.summary { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+                  padding: 16px 20px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.kpi { padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.kpi.high { background: #fde2e1; color: #8a1f1f; }
+.kpi.medium { background: #ffe9c2; color: #7a4a00; }
+.kpi.low { background: #d8efd8; color: #1f5a23; }
+.kpi.info { background: #e1ecff; color: #1f3d7a; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+         font-weight: 700; letter-spacing: .04em; vertical-align: middle; }
+.sev-high { background: #d12a2a; color: #fff; }
+.sev-medium { background: #d18a2a; color: #fff; }
+.sev-low { background: #2a8a3a; color: #fff; }
+.sev-info { background: #2a5ed1; color: #fff; }
+.tag { background: #eef0f3; color: #1f2328; padding: 2px 8px; border-radius: 4px;
+       font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.muted { color: #6b7280; }
+.finding { background: #fff; border: 1px solid #e3e6ea; border-left-width: 4px;
+           border-radius: 10px; padding: 14px 16px; margin: 12px 0;
+           box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+.sev-high-border { border-left-color: #d12a2a; }
+.sev-medium-border { border-left-color: #d18a2a; }
+.sev-low-border { border-left-color: #2a8a3a; }
+.sev-info-border { border-left-color: #2a5ed1; }
+.finding-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rule-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+           background: #f1f3f5; padding: 2px 6px; border-radius: 4px; color: #444; }
+.conf { font-size: 11px; color: #6b7280; }
+.anchor { margin-left: auto; color: #94a3b8; text-decoration: none; font-size: 14px; }
+.finding-title { margin: 8px 0 4px; font-weight: 600; font-size: 15px; }
+.finding-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;
+                color: #4b5563; margin-bottom: 6px; }
+.finding-meta code { font-size: 11px; }
+.finding-detail { font-size: 12px; color: #374151; margin: 6px 0;
+                  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.finding-rec { font-size: 13px; background: #f8fafc; border: 1px solid #e3e6ea;
+               border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+table.snippet { width: 100%; border-collapse: collapse; margin-top: 10px;
+                background: #0d1117; color: #e6edf3; border-radius: 8px; overflow: hidden;
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.snippet td { padding: 2px 8px; vertical-align: top; }
+table.snippet td.lno { width: 60px; text-align: right; color: #7d8590;
+                       background: #161b22; user-select: none; }
+table.snippet tr.snip-hit td { background: rgba(255, 200, 0, .12); color: #f6e7a3; }
+table.snippet pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+nav.toc { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #e3e6ea;
+          padding: 10px 32px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+nav.toc a { color: #1f3d7a; text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+details.source { margin-top: 32px; }
+details.source summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+table.source { width: 100%; border-collapse: collapse; background: #0d1117;
+               color: #e6edf3; border-radius: 8px; overflow: hidden;
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.source td { padding: 1px 8px; vertical-align: top; }
+table.source td.lno { width: 60px; text-align: right; color: #7d8590;
+                      background: #161b22; user-select: none; }
+table.source pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+table.source tr:target td { background: rgba(255, 200, 0, .25); }
+.verdict { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+           padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.verdict-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.verdict-status { display: inline-flex; align-items: center; gap: 8px;
+                  padding: 8px 16px; border-radius: 999px; font-size: 18px;
+                  font-weight: 800; letter-spacing: .08em; }
+.verdict-status.pass { background: #1f8a3a; color: #fff; }
+.verdict-status.fail { background: #c0252b; color: #fff; }
+.verdict-summary { color: #1f2328; font-size: 14px; }
+.verdict-reasons { margin-top: 16px; display: grid; gap: 12px; }
+.reason { border: 1px solid #f0c0c2; background: #fff5f5; border-left: 4px solid #c0252b;
+          border-radius: 8px; padding: 12px 14px; }
+.reason-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.reason-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+               background: #c0252b; color: #fff; padding: 2px 8px; border-radius: 4px;
+               font-size: 11px; font-weight: 700; }
+.reason-title { font-weight: 700; font-size: 14px; color: #1f2328; }
+.reason-detail { color: #4b5563; font-size: 13px; margin: 6px 0 10px; }
+.reason-rem { margin: 0 0 6px; padding-left: 20px; font-size: 13px; }
+.reason-rem li { margin: 2px 0; }
+.reason-refs { margin-top: 8px; font-size: 12px; }
+.reason-refs a { color: #c0252b; text-decoration: none; margin-right: 8px; }
+.reason-refs a:hover { text-decoration: underline; }
+.verdict-passmsg { color: #1f5a23; font-size: 13px; margin-top: 10px; }
+footer { color: #6b7280; font-size: 12px; padding: 24px 32px 48px; text-align: center; }
+</style>
+</head><body>
+<header>
+  <h1>n8n Workflow Audit Report</h1>
+  <div class="sub">
+    Workflow: <b>Customer Intake &amp; Enrichment (INSECURE TEST FIXTURE)</b> &middot;
+    File: <code>bad-workflow_custom.json</code> &middot;
+    Nodes: 7 &middot;
+    Rules: built-in defaults &middot;
+    Generated: 2026-06-26 20:01 UTC
+  </div>
+</header>
+<nav class="toc"><a href="#cat-Webhook Hygiene">Webhook Hygiene (2)</a> &middot; <a href="#cat-Security">Security (9)</a> &middot; <a href="#cat-AI / LLM">AI / LLM (3)</a> &middot; <a href="#cat-Error Handling">Error Handling (5)</a> &middot; <a href="#cat-Structural">Structural (2)</a> &middot; <a href="#cat-Hygiene">Hygiene (1)</a> &middot; <a href="#cat-Readability">Readability (3)</a></nav>
+<main>
+  
+<section class="verdict">
+  <div class="verdict-head">
+    <div class="verdict-status fail">&#x274C; FAIL</div>
+    <div class="verdict-summary">Workflow failed 7 gating check(s). Resolve every reason below and re-run.</div>
+  </div>
+  <div class="verdict-reasons">
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F1</span>
+    <span class="reason-title">10 HIGH-severity finding(s) present</span>
+  </div>
+  <div class="reason-detail">HIGH findings are release blockers regardless of category.</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>Open the Findings section below and resolve every HIGH item.</li><li>Re-run this auditor; the verdict should flip to PASS once all HIGH items are cleared.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#WHK-NO-AUTH-9">WHK-NO-AUTH@L9</a> <a href="#SEC-AWS-AKID-20">SEC-AWS-AKID@L20</a> <a href="#SEC-STRIPE-LIVE-22">SEC-STRIPE-LIVE@L22</a> <a href="#SEC-GH-PAT-23">SEC-GH-PAT@L23</a> <a href="#SEC-BEARER-36">SEC-BEARER@L36</a> <a href="#SEC-OPENAI-KEY-36">SEC-OPENAI-KEY@L36</a> <a href="#AI-PROMPT-INJECTION-PATH-41">AI-PROMPT-INJECTION-PATH@L41</a> <a href="#SEC-SENSITIVE-KEY-LITERAL-54">SEC-SENSITIVE-KEY-LITERAL@L54</a> <a href="#SEC-JWT-67">SEC-JWT@L67</a> <a href="#ERR-NO-ERROR-WORKFLOW-85">ERR-NO-ERROR-WORKFLOW@L85</a></div>
+</div>
+
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F2</span>
+    <span class="reason-title">8 MEDIUM-severity findings (threshold: 5)</span>
+  </div>
+  <div class="reason-detail">A cluster of MEDIUM findings indicates systemic gaps (no retries, no error handling, weak hygiene).</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>Triage MEDIUM findings by category; treat each category as a single fix campaign.</li><li>Apply &#x27;Retry on Fail&#x27; + &#x27;Continue on Error&#x27; on all risky nodes (HTTP, DB, LLM).</li><li>Strip unused / disabled nodes; rename unclear ones.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#WHK-WILDCARD-PATH-8">WHK-WILDCARD-PATH@L8</a> <a href="#ERR-NO-RETRY-OR-CONTINUE-29">ERR-NO-RETRY-OR-CONTINUE@L29</a> <a href="#ERR-NO-RETRY-OR-CONTINUE-41">ERR-NO-RETRY-OR-CONTINUE@L41</a> <a href="#AI-NO-GUARDRAIL-45">AI-NO-GUARDRAIL@L45</a> <a href="#ERR-NO-RETRY-OR-CONTINUE-48">ERR-NO-RETRY-OR-CONTINUE@L48</a> <a href="#ERR-NO-RETRY-OR-CONTINUE-62">ERR-NO-RETRY-OR-CONTINUE@L62</a> <a href="#STR-UNREACHABLE-62">STR-UNREACHABLE@L62</a> <a href="#HYG-PINDATA-SHIPPED-86">HYG-PINDATA-SHIPPED@L86</a></div>
+</div>
+
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F3</span>
+    <span class="reason-title">No Error Workflow configured</span>
+  </div>
+  <div class="reason-detail">Without an Error Workflow, runtime failures are silent -- no alerts, no audit trail.</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>Create a dedicated Error Trigger workflow that logs the error payload and sends a notification (Slack/email/PagerDuty).</li><li>In Workflow Settings -&gt; Error Workflow, select the workflow you just created.</li><li>Re-export and re-run the audit to confirm.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#ERR-NO-ERROR-WORKFLOW-85">ERR-NO-ERROR-WORKFLOW@L85</a></div>
+</div>
+
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F4</span>
+    <span class="reason-title">1 webhook/trigger node(s) without authentication</span>
+  </div>
+  <div class="reason-detail">Public unauthenticated webhooks can be abused for spam, DoS, data poisoning, or as a pivot into downstream systems.</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>On each flagged Webhook node, set &#x27;Authentication&#x27; to Header Auth / Basic Auth / JWT, or implement HMAC signature verification.</li><li>Rotate the webhook URL path to an unguessable value if it was ever public.</li><li>Add rate-limiting / IP allow-listing at the reverse proxy if exposed to the internet.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#WHK-NO-AUTH-9">WHK-NO-AUTH@L9</a></div>
+</div>
+
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F5</span>
+    <span class="reason-title">Untrusted input may reach 1 AI node(s): Node1</span>
+  </div>
+  <div class="reason-detail">A graph path exists from a trigger node to an LLM node. Anything a caller sends can influence the prompt (OWASP LLM01:2025).</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>Sanitize and strictly validate all user-controlled fields before they reach the LLM (allowlist, length cap, type checks).</li><li>Use a system prompt that explicitly refuses to follow instructions found inside user data.</li><li>Add an output guardrail step (regex / classifier / second LLM judge) before any side-effecting action.</li><li>Where possible, place untrusted text inside a clearly delimited block and instruct the model to treat it as data only.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#AI-PROMPT-INJECTION-PATH-41">AI-PROMPT-INJECTION-PATH@L41</a></div>
+</div>
+
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F6</span>
+    <span class="reason-title">7 hardcoded credential/secret finding(s)</span>
+  </div>
+  <div class="reason-detail">Secrets stored directly in workflow JSON travel with every export, every backup, and every git commit.</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>ROTATE the exposed credential immediately at the provider (assume it is leaked).</li><li>Recreate the credential inside n8n&#x27;s credential store.</li><li>Replace the literal in the node with an expression that references the credential.</li><li>Add a pre-commit hook / CI step that runs this auditor or gitleaks to prevent recurrence.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#SEC-AWS-AKID-20">SEC-AWS-AKID@L20</a> <a href="#SEC-STRIPE-LIVE-22">SEC-STRIPE-LIVE@L22</a> <a href="#SEC-GH-PAT-23">SEC-GH-PAT@L23</a> <a href="#SEC-BEARER-36">SEC-BEARER@L36</a> <a href="#SEC-OPENAI-KEY-36">SEC-OPENAI-KEY@L36</a> <a href="#SEC-SENSITIVE-KEY-LITERAL-54">SEC-SENSITIVE-KEY-LITERAL@L54</a> <a href="#SEC-JWT-67">SEC-JWT@L67</a></div>
+</div>
+
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">F7</span>
+    <span class="reason-title">pinData (test fixtures) is shipped in the workflow export</span>
+  </div>
+  <div class="reason-detail">Importers inherit pinned test data, which masks real upstream values during testing and may leak data captured during development.</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem"><li>In the n8n UI, right-click each pinned node and &#x27;Unpin Data&#x27; before exporting.</li><li>Alternatively, delete the top-level `pinData` key from the JSON before publishing.</li></ol>
+  <div class="reason-refs"><b>Evidence:</b> <a href="#HYG-PINDATA-SHIPPED-86">HYG-PINDATA-SHIPPED@L86</a></div>
+</div>
+</div>
+</section>
+
+  <section class="summary">
+    <div><b>Summary</b></div>
+    <div class="kpis">
+      <div class="kpi high">High: 10</div>
+      <div class="kpi medium">Medium: 8</div>
+      <div class="kpi low">Low: 7</div>
+      <div class="kpi info">Info: 0</div>
+      <div class="kpi" style="background:#eef0f3;color:#1f2328;">Total: 25</div>
+    </div>
+  </section>
+
+  <h2 id="cat-Webhook Hygiene">Webhook Hygiene <small>(2 findings)</small></h2>
+<div class="finding sev-high-border" id="WHK-NO-AUTH-9">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">WHK-NO-AUTH</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A01:2025 (Broken Access Control) / A07:2025</span>
+    <a class="anchor" href="#WHK-NO-AUTH-9">#</a>
+  </div>
+  <div class="finding-title">Webhook/trigger node &#x27;Webhook&#x27; has no authentication</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Webhook</code> <span class="muted">(n8n-nodes-base.webhook)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L9">9</a>:27</span>
+    <span><b>JSON pointer:</b> <code>/nodes/0/parameters/authentication</code></span>
+  </div>
+  <div class="finding-detail">authentication = &#x27;none&#x27;</div>
+  <div class="finding-rec"><b>Recommendation:</b> Enable header/basic/JWT auth or signature verification (e.g. HMAC).</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">8</td><td><pre>        &quot;path&quot;: &quot;*&quot;,</pre></td></tr><tr class="snip-hit"><td class="lno">9</td><td><pre>        &quot;authentication&quot;: &quot;none&quot;,</pre></td></tr><tr class="snip-ctx"><td class="lno">10</td><td><pre>        &quot;httpMethod&quot;: &quot;POST&quot;</pre></td></tr></table>
+</div>
+
+<div class="finding sev-medium-border" id="WHK-WILDCARD-PATH-8">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">WHK-WILDCARD-PATH</span>
+    <span class="conf">conf: medium</span>
+     <span class="tag">OWASP A01:2025</span>
+    <a class="anchor" href="#WHK-WILDCARD-PATH-8">#</a>
+  </div>
+  <div class="finding-title">Webhook &#x27;Webhook&#x27; uses an overly broad path</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Webhook</code> <span class="muted">(n8n-nodes-base.webhook)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L8">8</a>:17</span>
+    <span><b>JSON pointer:</b> <code>/nodes/0/parameters/path</code></span>
+  </div>
+  <div class="finding-detail">path = &#x27;*&#x27;</div>
+  <div class="finding-rec"><b>Recommendation:</b> Use a specific, unguessable path; avoid wildcards on public webhooks.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">7</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr><tr class="snip-hit"><td class="lno">8</td><td><pre>        &quot;path&quot;: &quot;*&quot;,</pre></td></tr><tr class="snip-ctx"><td class="lno">9</td><td><pre>        &quot;authentication&quot;: &quot;none&quot;,</pre></td></tr></table>
+</div>
+<h2 id="cat-Security">Security <small>(9 findings)</small></h2>
+<div class="finding sev-high-border" id="SEC-AWS-AKID-20">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-AWS-AKID</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-AWS-AKID-20">#</a>
+  </div>
+  <div class="finding-title">Hardcoded AWS Access Key ID</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Set</code> <span class="muted">(n8n-nodes-base.set)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L20">20</a>:43</span>
+    <span><b>JSON pointer:</b> <code>/nodes/1/parameters/values/string/1/value</code></span>
+  </div>
+  <div class="finding-detail">matched: AKIAIOSFODNN7EXAMPLE</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">19</td><td><pre>            { &quot;name&quot;: &quot;db_password&quot;, &quot;value&quot;: &quot;admin123&quot; },</pre></td></tr><tr class="snip-hit"><td class="lno">20</td><td><pre>            { &quot;name&quot;: &quot;aws_key&quot;, &quot;value&quot;: &quot;AKIAIOSFODNN7EXAMPLE&quot; },</pre></td></tr><tr class="snip-ctx"><td class="lno">21</td><td><pre>            { &quot;name&quot;: &quot;aws_secret&quot;, &quot;value&quot;: &quot;wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY&quot; },</pre></td></tr></table>
+</div>
+
+<div class="finding sev-high-border" id="SEC-STRIPE-LIVE-22">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-STRIPE-LIVE</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-STRIPE-LIVE-22">#</a>
+  </div>
+  <div class="finding-title">Hardcoded Stripe live key</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Set</code> <span class="muted">(n8n-nodes-base.set)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L22">22</a>:42</span>
+    <span><b>JSON pointer:</b> <code>/nodes/1/parameters/values/string/3/value</code></span>
+  </div>
+  <div class="finding-detail">matched: sk_live_4eC39HqLyjWDarjtT1zdp7dc00aBcDeFgH</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">21</td><td><pre>            { &quot;name&quot;: &quot;aws_secret&quot;, &quot;value&quot;: &quot;wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY&quot; },</pre></td></tr><tr class="snip-hit"><td class="lno">22</td><td><pre>            { &quot;name&quot;: &quot;stripe&quot;, &quot;value&quot;: &quot;sk_live_4eC39HqLyjWDarjtT1zdp7dc00aBcDeFgH&quot; },</pre></td></tr><tr class="snip-ctx"><td class="lno">23</td><td><pre>            { &quot;name&quot;: &quot;github_pat&quot;, &quot;value&quot;: &quot;ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789&quot; },</pre></td></tr></table>
+</div>
+
+<div class="finding sev-high-border" id="SEC-GH-PAT-23">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-GH-PAT</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-GH-PAT-23">#</a>
+  </div>
+  <div class="finding-title">Hardcoded GitHub PAT</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Set</code> <span class="muted">(n8n-nodes-base.set)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L23">23</a>:46</span>
+    <span><b>JSON pointer:</b> <code>/nodes/1/parameters/values/string/4/value</code></span>
+  </div>
+  <div class="finding-detail">matched: ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">22</td><td><pre>            { &quot;name&quot;: &quot;stripe&quot;, &quot;value&quot;: &quot;sk_live_4eC39HqLyjWDarjtT1zdp7dc00aBcDeFgH&quot; },</pre></td></tr><tr class="snip-hit"><td class="lno">23</td><td><pre>            { &quot;name&quot;: &quot;github_pat&quot;, &quot;value&quot;: &quot;ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789&quot; },</pre></td></tr><tr class="snip-ctx"><td class="lno">24</td><td><pre>            { &quot;name&quot;: &quot;contact_email&quot;, &quot;value&quot;: &quot;ops@axos.com&quot; }</pre></td></tr></table>
+</div>
+
+<div class="finding sev-high-border" id="SEC-BEARER-36">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-BEARER</span>
+    <span class="conf">conf: medium</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-BEARER-36">#</a>
+  </div>
+  <div class="finding-title">Hardcoded Bearer token</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>HTTP Request</code> <span class="muted">(n8n-nodes-base.httpRequest)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L36">36</a>:49</span>
+    <span><b>JSON pointer:</b> <code>/nodes/2/parameters/headerParameters/parameters/0/value</code></span>
+  </div>
+  <div class="finding-detail">matched: Bearer sk-AbCdEf1234567890abcdef1234567890ABCD</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">35</td><td><pre>          &quot;parameters&quot;: [</pre></td></tr><tr class="snip-hit"><td class="lno">36</td><td><pre>            { &quot;name&quot;: &quot;Authorization&quot;, &quot;value&quot;: &quot;Bearer sk-AbCdEf1234567890abcdef1234567890ABCD&quot; }</pre></td></tr><tr class="snip-ctx"><td class="lno">37</td><td><pre>          ]</pre></td></tr></table>
+</div>
+
+<div class="finding sev-high-border" id="SEC-OPENAI-KEY-36">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-OPENAI-KEY</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-OPENAI-KEY-36">#</a>
+  </div>
+  <div class="finding-title">Hardcoded OpenAI API key</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>HTTP Request</code> <span class="muted">(n8n-nodes-base.httpRequest)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L36">36</a>:49</span>
+    <span><b>JSON pointer:</b> <code>/nodes/2/parameters/headerParameters/parameters/0/value</code></span>
+  </div>
+  <div class="finding-detail">matched: sk-AbCdEf1234567890abcdef1234567890ABCD</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">35</td><td><pre>          &quot;parameters&quot;: [</pre></td></tr><tr class="snip-hit"><td class="lno">36</td><td><pre>            { &quot;name&quot;: &quot;Authorization&quot;, &quot;value&quot;: &quot;Bearer sk-AbCdEf1234567890abcdef1234567890ABCD&quot; }</pre></td></tr><tr class="snip-ctx"><td class="lno">37</td><td><pre>          ]</pre></td></tr></table>
+</div>
+
+<div class="finding sev-high-border" id="SEC-SENSITIVE-KEY-LITERAL-54">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-SENSITIVE-KEY-LITERAL</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A04:2025 (Cryptographic Failures) / A07:2025 (Auth Failures)</span>
+    <a class="anchor" href="#SEC-SENSITIVE-KEY-LITERAL-54">#</a>
+  </div>
+  <div class="finding-title">Sensitive key &#x27;password&#x27; holds a literal value</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Postgres</code> <span class="muted">(n8n-nodes-base.postgres)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L54">54</a>:21</span>
+    <span><b>JSON pointer:</b> <code>/nodes/4/parameters/password</code></span>
+  </div>
+  <div class="finding-detail">value preview: &#x27;P@ssw0rd-literal-in-json&#x27;</div>
+  <div class="finding-rec"><b>Recommendation:</b> Move this value to an n8n credential or env var; reference it via expression instead of hardcoding.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">53</td><td><pre>        &quot;query&quot;: &quot;INSERT INTO customers (data) VALUES ($1)&quot;,</pre></td></tr><tr class="snip-hit"><td class="lno">54</td><td><pre>        &quot;password&quot;: &quot;P@ssw0rd-literal-in-json&quot;</pre></td></tr><tr class="snip-ctx"><td class="lno">55</td><td><pre>      }</pre></td></tr></table>
+</div>
+
+<div class="finding sev-high-border" id="SEC-JWT-67">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">SEC-JWT</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-JWT-67">#</a>
+  </div>
+  <div class="finding-title">Hardcoded JWT</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Dangling Cleanup</code> <span class="muted">(n8n-nodes-base.code)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L67">67</a>:19</span>
+    <span><b>JSON pointer:</b> <code>/nodes/6/parameters/jsCode</code></span>
+  </div>
+  <div class="finding-detail">matched: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">66</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr><tr class="snip-hit"><td class="lno">67</td><td><pre>        &quot;jsCode&quot;: &quot;// leftover dead code\nconst token=&#x27;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c&#x27;; return items;&quot;</pre></td></tr><tr class="snip-ctx"><td class="lno">68</td><td><pre>      }</pre></td></tr></table>
+</div>
+
+<div class="finding sev-low-border" id="SEC-COMPANY-ID-24">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">SEC-COMPANY-ID</span>
+    <span class="conf">conf: medium</span>
+     <span class="tag">OWASP A09:2025 (Logging/Data exposure)</span>
+    <a class="anchor" href="#SEC-COMPANY-ID-24">#</a>
+  </div>
+  <div class="finding-title">Company identifier &#x27;Axos&#x27; found in workflow</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Set</code> <span class="muted">(n8n-nodes-base.set)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L24">24</a>:49</span>
+    <span><b>JSON pointer:</b> <code>/nodes/1/parameters/values/string/5/value</code></span>
+  </div>
+  <div class="finding-detail">value preview: &#x27;ops@axos.com&#x27;</div>
+  <div class="finding-rec"><b>Recommendation:</b> Confirm this identifier is safe to ship; consider parameterizing.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">23</td><td><pre>            { &quot;name&quot;: &quot;github_pat&quot;, &quot;value&quot;: &quot;ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789&quot; },</pre></td></tr><tr class="snip-hit"><td class="lno">24</td><td><pre>            { &quot;name&quot;: &quot;contact_email&quot;, &quot;value&quot;: &quot;ops@axos.com&quot; }</pre></td></tr><tr class="snip-ctx"><td class="lno">25</td><td><pre>          ]</pre></td></tr></table>
+</div>
+
+<div class="finding sev-low-border" id="SEC-EMAIL-24">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">SEC-EMAIL</span>
+    <span class="conf">conf: medium</span>
+     <span class="tag">OWASP A04:2025 / A07:2025</span>
+    <a class="anchor" href="#SEC-EMAIL-24">#</a>
+  </div>
+  <div class="finding-title">Hardcoded email address</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Set</code> <span class="muted">(n8n-nodes-base.set)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L24">24</a>:49</span>
+    <span><b>JSON pointer:</b> <code>/nodes/1/parameters/values/string/5/value</code></span>
+  </div>
+  <div class="finding-detail">matched: ops@axos.com</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rotate the credential immediately if real, and store via n8n credentials.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">23</td><td><pre>            { &quot;name&quot;: &quot;github_pat&quot;, &quot;value&quot;: &quot;ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789&quot; },</pre></td></tr><tr class="snip-hit"><td class="lno">24</td><td><pre>            { &quot;name&quot;: &quot;contact_email&quot;, &quot;value&quot;: &quot;ops@axos.com&quot; }</pre></td></tr><tr class="snip-ctx"><td class="lno">25</td><td><pre>          ]</pre></td></tr></table>
+</div>
+<h2 id="cat-AI / LLM">AI / LLM <small>(3 findings)</small></h2>
+<div class="finding sev-high-border" id="AI-PROMPT-INJECTION-PATH-41">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">AI-PROMPT-INJECTION-PATH</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP LLM01:2025 (Prompt Injection)</span>
+    <a class="anchor" href="#AI-PROMPT-INJECTION-PATH-41">#</a>
+  </div>
+  <div class="finding-title">Untrusted input may reach AI node &#x27;Node1&#x27;</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(@n8n/n8n-nodes-langchain.openAi)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L41">41</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/3</code></span>
+  </div>
+  <div class="finding-detail">A trigger node has a directed path to this LLM node; inputs must be treated as untrusted.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Sanitize / validate inputs, add a system-prompt guardrail, and apply an output filter.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">40</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">41</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">42</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-medium-border" id="AI-NO-GUARDRAIL-45">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">AI-NO-GUARDRAIL</span>
+    <span class="conf">conf: medium</span>
+     <span class="tag">OWASP LLM05:2025 (Improper Output Handling)</span>
+    <a class="anchor" href="#AI-NO-GUARDRAIL-45">#</a>
+  </div>
+  <div class="finding-title">AI node &#x27;Node1&#x27; prompt has no obvious guardrail language</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(@n8n/n8n-nodes-langchain.openAi)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L45">45</a>:17</span>
+    <span><b>JSON pointer:</b> <code>/nodes/3/parameters/text</code></span>
+  </div>
+  <div class="finding-detail">None of the configured guardrail keywords detected in the prompt.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Add explicit safety / refusal instructions and an output-validation step.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">44</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr><tr class="snip-hit"><td class="lno">45</td><td><pre>        &quot;text&quot;: &quot;Summarize the following customer record and respond with the next action to take based on the input data provided by the caller without any further checks.&quot;</pre></td></tr><tr class="snip-ctx"><td class="lno">46</td><td><pre>      }</pre></td></tr></table>
+</div>
+
+<div class="finding sev-low-border" id="AI-NO-RETRY-41">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">AI-NO-RETRY</span>
+    <span class="conf">conf: high</span>
+     <span class="tag">OWASP LLM10:2025</span>
+    <a class="anchor" href="#AI-NO-RETRY-41">#</a>
+  </div>
+  <div class="finding-title">AI node &#x27;Node1&#x27; has no retryOnFail</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(@n8n/n8n-nodes-langchain.openAi)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L41">41</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/3</code></span>
+  </div>
+  <div class="finding-detail">LLM APIs frequently rate-limit / 5xx.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Enable retryOnFail with a small delay; configure a fallback model.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">40</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">41</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">42</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr></table>
+</div>
+<h2 id="cat-Error Handling">Error Handling <small>(5 findings)</small></h2>
+<div class="finding sev-high-border" id="ERR-NO-ERROR-WORKFLOW-85">
+  <div class="finding-head">
+    <span class="badge sev-high">HIGH</span>
+    <span class="rule-id">ERR-NO-ERROR-WORKFLOW</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#ERR-NO-ERROR-WORKFLOW-85">#</a>
+  </div>
+  <div class="finding-title">No Error Workflow configured</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <span class="muted">workflow-level</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L85">85</a>:15</span>
+    <span><b>JSON pointer:</b> <code>/settings</code></span>
+  </div>
+  <div class="finding-detail">settings.errorWorkflow is empty.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Create an Error Trigger workflow that logs + notifies on failures, and attach it here.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">84</td><td><pre>  },</pre></td></tr><tr class="snip-hit"><td class="lno">85</td><td><pre>  &quot;settings&quot;: {},</pre></td></tr><tr class="snip-ctx"><td class="lno">86</td><td><pre>  &quot;pinData&quot;: {</pre></td></tr></table>
+</div>
+
+<div class="finding sev-medium-border" id="ERR-NO-RETRY-OR-CONTINUE-29">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">ERR-NO-RETRY-OR-CONTINUE</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#ERR-NO-RETRY-OR-CONTINUE-29">#</a>
+  </div>
+  <div class="finding-title">Risky node &#x27;HTTP Request&#x27; has neither retryOnFail nor continueOnFail</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>HTTP Request</code> <span class="muted">(n8n-nodes-base.httpRequest)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L29">29</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/2</code></span>
+  </div>
+  <div class="finding-detail">type = n8n-nodes-base.httpRequest</div>
+  <div class="finding-rec"><b>Recommendation:</b> Enable Retry on Fail, set a timeout, and consider Continue On Error.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">28</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">29</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">30</td><td><pre>      &quot;name&quot;: &quot;HTTP Request&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-medium-border" id="ERR-NO-RETRY-OR-CONTINUE-41">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">ERR-NO-RETRY-OR-CONTINUE</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#ERR-NO-RETRY-OR-CONTINUE-41">#</a>
+  </div>
+  <div class="finding-title">Risky node &#x27;Node1&#x27; has neither retryOnFail nor continueOnFail</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(@n8n/n8n-nodes-langchain.openAi)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L41">41</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/3</code></span>
+  </div>
+  <div class="finding-detail">type = @n8n/n8n-nodes-langchain.openAi</div>
+  <div class="finding-rec"><b>Recommendation:</b> Configure retries, fallback model, and polling for long tasks.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">40</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">41</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">42</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-medium-border" id="ERR-NO-RETRY-OR-CONTINUE-48">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">ERR-NO-RETRY-OR-CONTINUE</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#ERR-NO-RETRY-OR-CONTINUE-48">#</a>
+  </div>
+  <div class="finding-title">Risky node &#x27;Postgres&#x27; has neither retryOnFail nor continueOnFail</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Postgres</code> <span class="muted">(n8n-nodes-base.postgres)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L48">48</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/4</code></span>
+  </div>
+  <div class="finding-detail">type = n8n-nodes-base.postgres</div>
+  <div class="finding-rec"><b>Recommendation:</b> Wrap DB ops with Continue On Error and validate inputs.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">47</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">48</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">49</td><td><pre>      &quot;name&quot;: &quot;Postgres&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-medium-border" id="ERR-NO-RETRY-OR-CONTINUE-62">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">ERR-NO-RETRY-OR-CONTINUE</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#ERR-NO-RETRY-OR-CONTINUE-62">#</a>
+  </div>
+  <div class="finding-title">Risky node &#x27;Dangling Cleanup&#x27; has neither retryOnFail nor continueOnFail</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Dangling Cleanup</code> <span class="muted">(n8n-nodes-base.code)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L62">62</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/6</code></span>
+  </div>
+  <div class="finding-detail">type = n8n-nodes-base.code</div>
+  <div class="finding-rec"><b>Recommendation:</b> Custom Code nodes throw on runtime errors; wrap in try/catch and use Continue On Error.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">61</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">62</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">63</td><td><pre>      &quot;name&quot;: &quot;Dangling Cleanup&quot;,</pre></td></tr></table>
+</div>
+<h2 id="cat-Structural">Structural <small>(2 findings)</small></h2>
+<div class="finding sev-medium-border" id="STR-UNREACHABLE-62">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">STR-UNREACHABLE</span>
+    <span class="conf">conf: medium</span>
+    
+    <a class="anchor" href="#STR-UNREACHABLE-62">#</a>
+  </div>
+  <div class="finding-title">Node &#x27;Dangling Cleanup&#x27; is unreachable (no incoming connections)</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Dangling Cleanup</code> <span class="muted">(n8n-nodes-base.code)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L62">62</a>:5</span>
+    <span><b>JSON pointer:</b> <code>/nodes/6</code></span>
+  </div>
+  <div class="finding-detail">type = n8n-nodes-base.code</div>
+  <div class="finding-rec"><b>Recommendation:</b> Delete the node or connect it from upstream.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">61</td><td><pre>    },</pre></td></tr><tr class="snip-hit"><td class="lno">62</td><td><pre>    {</pre></td></tr><tr class="snip-ctx"><td class="lno">63</td><td><pre>      &quot;name&quot;: &quot;Dangling Cleanup&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-low-border" id="STR-DISABLED-NODE-65">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">STR-DISABLED-NODE</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#STR-DISABLED-NODE-65">#</a>
+  </div>
+  <div class="finding-title">Node &#x27;Dangling Cleanup&#x27; is disabled</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Dangling Cleanup</code> <span class="muted">(n8n-nodes-base.code)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L65">65</a>:19</span>
+    <span><b>JSON pointer:</b> <code>/nodes/6/disabled</code></span>
+  </div>
+  
+  <div class="finding-rec"><b>Recommendation:</b> Remove if dead code; document if intentional.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">64</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.code&quot;,</pre></td></tr><tr class="snip-hit"><td class="lno">65</td><td><pre>      &quot;disabled&quot;: true,</pre></td></tr><tr class="snip-ctx"><td class="lno">66</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr></table>
+</div>
+<h2 id="cat-Hygiene">Hygiene <small>(1 findings)</small></h2>
+<div class="finding sev-medium-border" id="HYG-PINDATA-SHIPPED-86">
+  <div class="finding-head">
+    <span class="badge sev-medium">MEDIUM</span>
+    <span class="rule-id">HYG-PINDATA-SHIPPED</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#HYG-PINDATA-SHIPPED-86">#</a>
+  </div>
+  <div class="finding-title">Workflow exports pinned test data</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <span class="muted">workflow-level</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L86">86</a>:14</span>
+    <span><b>JSON pointer:</b> <code>/pinData</code></span>
+  </div>
+  <div class="finding-detail">`pinData` is present -- importers will inherit stale fixtures.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Strip pinData before publishing the workflow JSON.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">85</td><td><pre>  &quot;settings&quot;: {},</pre></td></tr><tr class="snip-hit"><td class="lno">86</td><td><pre>  &quot;pinData&quot;: {</pre></td></tr><tr class="snip-ctx"><td class="lno">87</td><td><pre>    &quot;Webhook&quot;: [</pre></td></tr></table>
+</div>
+<h2 id="cat-Readability">Readability <small>(3 findings)</small></h2>
+<div class="finding sev-low-border" id="READ-DUPLICATE-NAME-42">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">READ-DUPLICATE-NAME</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#READ-DUPLICATE-NAME-42">#</a>
+  </div>
+  <div class="finding-title">Duplicate node name &#x27;Node1&#x27; (2 occurrences)</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(@n8n/n8n-nodes-langchain.openAi)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L42">42</a>:15</span>
+    <span><b>JSON pointer:</b> <code>/nodes/3/name</code></span>
+  </div>
+  
+  <div class="finding-rec"><b>Recommendation:</b> Give each node a unique name for unambiguous debugging.</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">41</td><td><pre>    {</pre></td></tr><tr class="snip-hit"><td class="lno">42</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr><tr class="snip-ctx"><td class="lno">43</td><td><pre>      &quot;type&quot;: &quot;@n8n/n8n-nodes-langchain.openAi&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-low-border" id="READ-UNCLEAR-NAME-42">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">READ-UNCLEAR-NAME</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#READ-UNCLEAR-NAME-42">#</a>
+  </div>
+  <div class="finding-title">Unclear node name: &#x27;Node1&#x27;</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(@n8n/n8n-nodes-langchain.openAi)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L42">42</a>:15</span>
+    <span><b>JSON pointer:</b> <code>/nodes/3/name</code></span>
+  </div>
+  <div class="finding-detail">Default or too-short name.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rename to a descriptive verb-noun phrase (e.g. &#x27;Fetch Customers from API&#x27;).</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">41</td><td><pre>    {</pre></td></tr><tr class="snip-hit"><td class="lno">42</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr><tr class="snip-ctx"><td class="lno">43</td><td><pre>      &quot;type&quot;: &quot;@n8n/n8n-nodes-langchain.openAi&quot;,</pre></td></tr></table>
+</div>
+
+<div class="finding sev-low-border" id="READ-UNCLEAR-NAME-58">
+  <div class="finding-head">
+    <span class="badge sev-low">LOW</span>
+    <span class="rule-id">READ-UNCLEAR-NAME</span>
+    <span class="conf">conf: high</span>
+    
+    <a class="anchor" href="#READ-UNCLEAR-NAME-58">#</a>
+  </div>
+  <div class="finding-title">Unclear node name: &#x27;Node1&#x27;</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> <code>Node1</code> <span class="muted">(n8n-nodes-base.noOp)</span></span>
+    <span><b>Line:</b> <a class="lineref" href="#L58">58</a>:15</span>
+    <span><b>JSON pointer:</b> <code>/nodes/5/name</code></span>
+  </div>
+  <div class="finding-detail">Default or too-short name.</div>
+  <div class="finding-rec"><b>Recommendation:</b> Rename to a descriptive verb-noun phrase (e.g. &#x27;Fetch Customers from API&#x27;).</div>
+  <table class="snippet"><tr class="snip-ctx"><td class="lno">57</td><td><pre>    {</pre></td></tr><tr class="snip-hit"><td class="lno">58</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr><tr class="snip-ctx"><td class="lno">59</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.noOp&quot;,</pre></td></tr></table>
+</div>
+
+
+  <details class="source">
+    <summary>Full source (91 lines) -- click line numbers in findings above to jump here</summary>
+    <table class="source"><tr id="L1"><td class="lno">1</td><td><pre>{</pre></td></tr>
+<tr id="L2"><td class="lno">2</td><td><pre>  &quot;name&quot;: &quot;Customer Intake &amp; Enrichment (INSECURE TEST FIXTURE)&quot;,</pre></td></tr>
+<tr id="L3"><td class="lno">3</td><td><pre>  &quot;nodes&quot;: [</pre></td></tr>
+<tr id="L4"><td class="lno">4</td><td><pre>    {</pre></td></tr>
+<tr id="L5"><td class="lno">5</td><td><pre>      &quot;name&quot;: &quot;Webhook&quot;,</pre></td></tr>
+<tr id="L6"><td class="lno">6</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.webhook&quot;,</pre></td></tr>
+<tr id="L7"><td class="lno">7</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L8"><td class="lno">8</td><td><pre>        &quot;path&quot;: &quot;*&quot;,</pre></td></tr>
+<tr id="L9"><td class="lno">9</td><td><pre>        &quot;authentication&quot;: &quot;none&quot;,</pre></td></tr>
+<tr id="L10"><td class="lno">10</td><td><pre>        &quot;httpMethod&quot;: &quot;POST&quot;</pre></td></tr>
+<tr id="L11"><td class="lno">11</td><td><pre>      }</pre></td></tr>
+<tr id="L12"><td class="lno">12</td><td><pre>    },</pre></td></tr>
+<tr id="L13"><td class="lno">13</td><td><pre>    {</pre></td></tr>
+<tr id="L14"><td class="lno">14</td><td><pre>      &quot;name&quot;: &quot;Set&quot;,</pre></td></tr>
+<tr id="L15"><td class="lno">15</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.set&quot;,</pre></td></tr>
+<tr id="L16"><td class="lno">16</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L17"><td class="lno">17</td><td><pre>        &quot;values&quot;: {</pre></td></tr>
+<tr id="L18"><td class="lno">18</td><td><pre>          &quot;string&quot;: [</pre></td></tr>
+<tr id="L19"><td class="lno">19</td><td><pre>            { &quot;name&quot;: &quot;db_password&quot;, &quot;value&quot;: &quot;admin123&quot; },</pre></td></tr>
+<tr id="L20"><td class="lno">20</td><td><pre>            { &quot;name&quot;: &quot;aws_key&quot;, &quot;value&quot;: &quot;AKIAIOSFODNN7EXAMPLE&quot; },</pre></td></tr>
+<tr id="L21"><td class="lno">21</td><td><pre>            { &quot;name&quot;: &quot;aws_secret&quot;, &quot;value&quot;: &quot;wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY&quot; },</pre></td></tr>
+<tr id="L22"><td class="lno">22</td><td><pre>            { &quot;name&quot;: &quot;stripe&quot;, &quot;value&quot;: &quot;sk_live_4eC39HqLyjWDarjtT1zdp7dc00aBcDeFgH&quot; },</pre></td></tr>
+<tr id="L23"><td class="lno">23</td><td><pre>            { &quot;name&quot;: &quot;github_pat&quot;, &quot;value&quot;: &quot;ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789&quot; },</pre></td></tr>
+<tr id="L24"><td class="lno">24</td><td><pre>            { &quot;name&quot;: &quot;contact_email&quot;, &quot;value&quot;: &quot;ops@axos.com&quot; }</pre></td></tr>
+<tr id="L25"><td class="lno">25</td><td><pre>          ]</pre></td></tr>
+<tr id="L26"><td class="lno">26</td><td><pre>        }</pre></td></tr>
+<tr id="L27"><td class="lno">27</td><td><pre>      }</pre></td></tr>
+<tr id="L28"><td class="lno">28</td><td><pre>    },</pre></td></tr>
+<tr id="L29"><td class="lno">29</td><td><pre>    {</pre></td></tr>
+<tr id="L30"><td class="lno">30</td><td><pre>      &quot;name&quot;: &quot;HTTP Request&quot;,</pre></td></tr>
+<tr id="L31"><td class="lno">31</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.httpRequest&quot;,</pre></td></tr>
+<tr id="L32"><td class="lno">32</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L33"><td class="lno">33</td><td><pre>        &quot;url&quot;: &quot;https://api.acme.com/enrich&quot;,</pre></td></tr>
+<tr id="L34"><td class="lno">34</td><td><pre>        &quot;headerParameters&quot;: {</pre></td></tr>
+<tr id="L35"><td class="lno">35</td><td><pre>          &quot;parameters&quot;: [</pre></td></tr>
+<tr id="L36"><td class="lno">36</td><td><pre>            { &quot;name&quot;: &quot;Authorization&quot;, &quot;value&quot;: &quot;Bearer sk-AbCdEf1234567890abcdef1234567890ABCD&quot; }</pre></td></tr>
+<tr id="L37"><td class="lno">37</td><td><pre>          ]</pre></td></tr>
+<tr id="L38"><td class="lno">38</td><td><pre>        }</pre></td></tr>
+<tr id="L39"><td class="lno">39</td><td><pre>      }</pre></td></tr>
+<tr id="L40"><td class="lno">40</td><td><pre>    },</pre></td></tr>
+<tr id="L41"><td class="lno">41</td><td><pre>    {</pre></td></tr>
+<tr id="L42"><td class="lno">42</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr>
+<tr id="L43"><td class="lno">43</td><td><pre>      &quot;type&quot;: &quot;@n8n/n8n-nodes-langchain.openAi&quot;,</pre></td></tr>
+<tr id="L44"><td class="lno">44</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L45"><td class="lno">45</td><td><pre>        &quot;text&quot;: &quot;Summarize the following customer record and respond with the next action to take based on the input data provided by the caller without any further checks.&quot;</pre></td></tr>
+<tr id="L46"><td class="lno">46</td><td><pre>      }</pre></td></tr>
+<tr id="L47"><td class="lno">47</td><td><pre>    },</pre></td></tr>
+<tr id="L48"><td class="lno">48</td><td><pre>    {</pre></td></tr>
+<tr id="L49"><td class="lno">49</td><td><pre>      &quot;name&quot;: &quot;Postgres&quot;,</pre></td></tr>
+<tr id="L50"><td class="lno">50</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.postgres&quot;,</pre></td></tr>
+<tr id="L51"><td class="lno">51</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L52"><td class="lno">52</td><td><pre>        &quot;operation&quot;: &quot;executeQuery&quot;,</pre></td></tr>
+<tr id="L53"><td class="lno">53</td><td><pre>        &quot;query&quot;: &quot;INSERT INTO customers (data) VALUES ($1)&quot;,</pre></td></tr>
+<tr id="L54"><td class="lno">54</td><td><pre>        &quot;password&quot;: &quot;P@ssw0rd-literal-in-json&quot;</pre></td></tr>
+<tr id="L55"><td class="lno">55</td><td><pre>      }</pre></td></tr>
+<tr id="L56"><td class="lno">56</td><td><pre>    },</pre></td></tr>
+<tr id="L57"><td class="lno">57</td><td><pre>    {</pre></td></tr>
+<tr id="L58"><td class="lno">58</td><td><pre>      &quot;name&quot;: &quot;Node1&quot;,</pre></td></tr>
+<tr id="L59"><td class="lno">59</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.noOp&quot;,</pre></td></tr>
+<tr id="L60"><td class="lno">60</td><td><pre>      &quot;parameters&quot;: {}</pre></td></tr>
+<tr id="L61"><td class="lno">61</td><td><pre>    },</pre></td></tr>
+<tr id="L62"><td class="lno">62</td><td><pre>    {</pre></td></tr>
+<tr id="L63"><td class="lno">63</td><td><pre>      &quot;name&quot;: &quot;Dangling Cleanup&quot;,</pre></td></tr>
+<tr id="L64"><td class="lno">64</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.code&quot;,</pre></td></tr>
+<tr id="L65"><td class="lno">65</td><td><pre>      &quot;disabled&quot;: true,</pre></td></tr>
+<tr id="L66"><td class="lno">66</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L67"><td class="lno">67</td><td><pre>        &quot;jsCode&quot;: &quot;// leftover dead code\nconst token=&#x27;eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c&#x27;; return items;&quot;</pre></td></tr>
+<tr id="L68"><td class="lno">68</td><td><pre>      }</pre></td></tr>
+<tr id="L69"><td class="lno">69</td><td><pre>    }</pre></td></tr>
+<tr id="L70"><td class="lno">70</td><td><pre>  ],</pre></td></tr>
+<tr id="L71"><td class="lno">71</td><td><pre>  &quot;connections&quot;: {</pre></td></tr>
+<tr id="L72"><td class="lno">72</td><td><pre>    &quot;Webhook&quot;: {</pre></td></tr>
+<tr id="L73"><td class="lno">73</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Set&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L74"><td class="lno">74</td><td><pre>    },</pre></td></tr>
+<tr id="L75"><td class="lno">75</td><td><pre>    &quot;Set&quot;: {</pre></td></tr>
+<tr id="L76"><td class="lno">76</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;HTTP Request&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L77"><td class="lno">77</td><td><pre>    },</pre></td></tr>
+<tr id="L78"><td class="lno">78</td><td><pre>    &quot;HTTP Request&quot;: {</pre></td></tr>
+<tr id="L79"><td class="lno">79</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Node1&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L80"><td class="lno">80</td><td><pre>    },</pre></td></tr>
+<tr id="L81"><td class="lno">81</td><td><pre>    &quot;Node1&quot;: {</pre></td></tr>
+<tr id="L82"><td class="lno">82</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Postgres&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L83"><td class="lno">83</td><td><pre>    }</pre></td></tr>
+<tr id="L84"><td class="lno">84</td><td><pre>  },</pre></td></tr>
+<tr id="L85"><td class="lno">85</td><td><pre>  &quot;settings&quot;: {},</pre></td></tr>
+<tr id="L86"><td class="lno">86</td><td><pre>  &quot;pinData&quot;: {</pre></td></tr>
+<tr id="L87"><td class="lno">87</td><td><pre>    &quot;Webhook&quot;: [</pre></td></tr>
+<tr id="L88"><td class="lno">88</td><td><pre>      { &quot;json&quot;: { &quot;email&quot;: &quot;leaked.customer@example.com&quot;, &quot;ssn&quot;: &quot;123-45-6789&quot; } }</pre></td></tr>
+<tr id="L89"><td class="lno">89</td><td><pre>    ]</pre></td></tr>
+<tr id="L90"><td class="lno">90</td><td><pre>  }</pre></td></tr>
+<tr id="L91"><td class="lno">91</td><td><pre>}</pre></td></tr></table>
+  </details>
+</main>
+<footer>
+  n8n Workflow Auditor v3 (local, rules-driven) &middot; static analysis &middot;
+  rules: built-in defaults
+</footer>
+</body></html>
