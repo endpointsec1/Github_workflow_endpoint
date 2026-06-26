@@ -1,0 +1,11 @@
+{
+  "rules_version": "built-in",
+  "rules_generated_at": null,
+  "verdict": {
+    "status": "PASS",
+    "summary": "All gating checks passed. Advisories: 0 medium, 0 low, 0 info.",
+    "counts": {},
+    "reasons": []
+  },
+  "findings": []
+}

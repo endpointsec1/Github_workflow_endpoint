@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>n8n Workflow Audit Report -- Daily Customer Sync (CLEAN TEST FIXTURE)</title>
+<style>:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+       margin: 0; background: #f7f8fa; color: #1f2328; }
+header { background: linear-gradient(135deg,#0d1117,#1f2937); color: #fff; padding: 24px 32px; }
+header h1 { margin: 0 0 4px; font-size: 22px; }
+header .sub { opacity: .8; font-size: 13px; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 32px 80px; }
+section.summary { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+                  padding: 16px 20px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.kpi { padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.kpi.high { background: #fde2e1; color: #8a1f1f; }
+.kpi.medium { background: #ffe9c2; color: #7a4a00; }
+.kpi.low { background: #d8efd8; color: #1f5a23; }
+.kpi.info { background: #e1ecff; color: #1f3d7a; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+         font-weight: 700; letter-spacing: .04em; vertical-align: middle; }
+.sev-high { background: #d12a2a; color: #fff; }
+.sev-medium { background: #d18a2a; color: #fff; }
+.sev-low { background: #2a8a3a; color: #fff; }
+.sev-info { background: #2a5ed1; color: #fff; }
+.tag { background: #eef0f3; color: #1f2328; padding: 2px 8px; border-radius: 4px;
+       font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.muted { color: #6b7280; }
+.finding { background: #fff; border: 1px solid #e3e6ea; border-left-width: 4px;
+           border-radius: 10px; padding: 14px 16px; margin: 12px 0;
+           box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+.sev-high-border { border-left-color: #d12a2a; }
+.sev-medium-border { border-left-color: #d18a2a; }
+.sev-low-border { border-left-color: #2a8a3a; }
+.sev-info-border { border-left-color: #2a5ed1; }
+.finding-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rule-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+           background: #f1f3f5; padding: 2px 6px; border-radius: 4px; color: #444; }
+.conf { font-size: 11px; color: #6b7280; }
+.anchor { margin-left: auto; color: #94a3b8; text-decoration: none; font-size: 14px; }
+.finding-title { margin: 8px 0 4px; font-weight: 600; font-size: 15px; }
+.finding-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;
+                color: #4b5563; margin-bottom: 6px; }
+.finding-meta code { font-size: 11px; }
+.finding-detail { font-size: 12px; color: #374151; margin: 6px 0;
+                  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.finding-rec { font-size: 13px; background: #f8fafc; border: 1px solid #e3e6ea;
+               border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+table.snippet { width: 100%; border-collapse: collapse; margin-top: 10px;
+                background: #0d1117; color: #e6edf3; border-radius: 8px; overflow: hidden;
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.snippet td { padding: 2px 8px; vertical-align: top; }
+table.snippet td.lno { width: 60px; text-align: right; color: #7d8590;
+                       background: #161b22; user-select: none; }
+table.snippet tr.snip-hit td { background: rgba(255, 200, 0, .12); color: #f6e7a3; }
+table.snippet pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+nav.toc { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #e3e6ea;
+          padding: 10px 32px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+nav.toc a { color: #1f3d7a; text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+details.source { margin-top: 32px; }
+details.source summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+table.source { width: 100%; border-collapse: collapse; background: #0d1117;
+               color: #e6edf3; border-radius: 8px; overflow: hidden;
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.source td { padding: 1px 8px; vertical-align: top; }
+table.source td.lno { width: 60px; text-align: right; color: #7d8590;
+                      background: #161b22; user-select: none; }
+table.source pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+table.source tr:target td { background: rgba(255, 200, 0, .25); }
+.verdict { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+           padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.verdict-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.verdict-status { display: inline-flex; align-items: center; gap: 8px;
+                  padding: 8px 16px; border-radius: 999px; font-size: 18px;
+                  font-weight: 800; letter-spacing: .08em; }
+.verdict-status.pass { background: #1f8a3a; color: #fff; }
+.verdict-status.fail { background: #c0252b; color: #fff; }
+.verdict-summary { color: #1f2328; font-size: 14px; }
+.verdict-reasons { margin-top: 16px; display: grid; gap: 12px; }
+.reason { border: 1px solid #f0c0c2; background: #fff5f5; border-left: 4px solid #c0252b;
+          border-radius: 8px; padding: 12px 14px; }
+.reason-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.reason-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+               background: #c0252b; color: #fff; padding: 2px 8px; border-radius: 4px;
+               font-size: 11px; font-weight: 700; }
+.reason-title { font-weight: 700; font-size: 14px; color: #1f2328; }
+.reason-detail { color: #4b5563; font-size: 13px; margin: 6px 0 10px; }
+.reason-rem { margin: 0 0 6px; padding-left: 20px; font-size: 13px; }
+.reason-rem li { margin: 2px 0; }
+.reason-refs { margin-top: 8px; font-size: 12px; }
+.reason-refs a { color: #c0252b; text-decoration: none; margin-right: 8px; }
+.reason-refs a:hover { text-decoration: underline; }
+.verdict-passmsg { color: #1f5a23; font-size: 13px; margin-top: 10px; }
+footer { color: #6b7280; font-size: 12px; padding: 24px 32px 48px; text-align: center; }
+</style>
+</head><body>
+<header>
+  <h1>n8n Workflow Audit Report</h1>
+  <div class="sub">
+    Workflow: <b>Daily Customer Sync (CLEAN TEST FIXTURE)</b> &middot;
+    File: <code>good-workflow_custom.json</code> &middot;
+    Nodes: 5 &middot;
+    Rules: built-in defaults &middot;
+    Generated: 2026-06-26 18:49 UTC
+  </div>
+</header>
+<nav class="toc"><span class='muted'>No findings</span></nav>
+<main>
+  
+<section class="verdict">
+  <div class="verdict-head">
+    <div class="verdict-status pass">&#x2705; PASS</div>
+    <div class="verdict-summary">All gating checks passed. Advisories: 0 medium, 0 low, 0 info.</div>
+  </div>
+  <div class="verdict-passmsg">No gating checks tripped. Review advisories below to keep the workflow healthy.</div>
+</section>
+
+  <section class="summary">
+    <div><b>Summary</b></div>
+    <div class="kpis">
+      <div class="kpi high">High: 0</div>
+      <div class="kpi medium">Medium: 0</div>
+      <div class="kpi low">Low: 0</div>
+      <div class="kpi info">Info: 0</div>
+      <div class="kpi" style="background:#eef0f3;color:#1f2328;">Total: 0</div>
+    </div>
+  </section>
+
+  <p>No findings. Workflow looks clean against the current ruleset.</p>
+
+  <details class="source">
+    <summary>Full source (78 lines) -- click line numbers in findings above to jump here</summary>
+    <table class="source"><tr id="L1"><td class="lno">1</td><td><pre>{</pre></td></tr>
+<tr id="L2"><td class="lno">2</td><td><pre>  &quot;name&quot;: &quot;Daily Customer Sync (CLEAN TEST FIXTURE)&quot;,</pre></td></tr>
+<tr id="L3"><td class="lno">3</td><td><pre>  &quot;nodes&quot;: [</pre></td></tr>
+<tr id="L4"><td class="lno">4</td><td><pre>    {</pre></td></tr>
+<tr id="L5"><td class="lno">5</td><td><pre>      &quot;name&quot;: &quot;Every Morning Trigger&quot;,</pre></td></tr>
+<tr id="L6"><td class="lno">6</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.scheduleTrigger&quot;,</pre></td></tr>
+<tr id="L7"><td class="lno">7</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L8"><td class="lno">8</td><td><pre>        &quot;rule&quot;: { &quot;interval&quot;: [{ &quot;field&quot;: &quot;hours&quot;, &quot;hoursInterval&quot;: 24 }] }</pre></td></tr>
+<tr id="L9"><td class="lno">9</td><td><pre>      }</pre></td></tr>
+<tr id="L10"><td class="lno">10</td><td><pre>    },</pre></td></tr>
+<tr id="L11"><td class="lno">11</td><td><pre>    {</pre></td></tr>
+<tr id="L12"><td class="lno">12</td><td><pre>      &quot;name&quot;: &quot;Fetch Customer Records (Airtable)&quot;,</pre></td></tr>
+<tr id="L13"><td class="lno">13</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.airtable&quot;,</pre></td></tr>
+<tr id="L14"><td class="lno">14</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L15"><td class="lno">15</td><td><pre>        &quot;operation&quot;: &quot;search&quot;,</pre></td></tr>
+<tr id="L16"><td class="lno">16</td><td><pre>        &quot;base&quot;: &quot;={{ $env.AIRTABLE_BASE_ID }}&quot;</pre></td></tr>
+<tr id="L17"><td class="lno">17</td><td><pre>      },</pre></td></tr>
+<tr id="L18"><td class="lno">18</td><td><pre>      &quot;credentials&quot;: { &quot;airtableApi&quot;: { &quot;id&quot;: &quot;1&quot;, &quot;name&quot;: &quot;Airtable account&quot; } },</pre></td></tr>
+<tr id="L19"><td class="lno">19</td><td><pre>      &quot;retryOnFail&quot;: true</pre></td></tr>
+<tr id="L20"><td class="lno">20</td><td><pre>    },</pre></td></tr>
+<tr id="L21"><td class="lno">21</td><td><pre>    {</pre></td></tr>
+<tr id="L22"><td class="lno">22</td><td><pre>      &quot;name&quot;: &quot;Enrich via Internal API&quot;,</pre></td></tr>
+<tr id="L23"><td class="lno">23</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.httpRequest&quot;,</pre></td></tr>
+<tr id="L24"><td class="lno">24</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L25"><td class="lno">25</td><td><pre>        &quot;url&quot;: &quot;https://internal.example.com/enrich&quot;,</pre></td></tr>
+<tr id="L26"><td class="lno">26</td><td><pre>        &quot;authentication&quot;: &quot;predefinedCredentialType&quot;,</pre></td></tr>
+<tr id="L27"><td class="lno">27</td><td><pre>        &quot;headerParameters&quot;: {</pre></td></tr>
+<tr id="L28"><td class="lno">28</td><td><pre>          &quot;parameters&quot;: [</pre></td></tr>
+<tr id="L29"><td class="lno">29</td><td><pre>            { &quot;name&quot;: &quot;Authorization&quot;, &quot;value&quot;: &quot;={{ $credentials.internalApi.token }}&quot; }</pre></td></tr>
+<tr id="L30"><td class="lno">30</td><td><pre>          ]</pre></td></tr>
+<tr id="L31"><td class="lno">31</td><td><pre>        }</pre></td></tr>
+<tr id="L32"><td class="lno">32</td><td><pre>      },</pre></td></tr>
+<tr id="L33"><td class="lno">33</td><td><pre>      &quot;credentials&quot;: { &quot;httpHeaderAuth&quot;: { &quot;id&quot;: &quot;2&quot;, &quot;name&quot;: &quot;Internal API&quot; } },</pre></td></tr>
+<tr id="L34"><td class="lno">34</td><td><pre>      &quot;retryOnFail&quot;: true,</pre></td></tr>
+<tr id="L35"><td class="lno">35</td><td><pre>      &quot;continueOnFail&quot;: true</pre></td></tr>
+<tr id="L36"><td class="lno">36</td><td><pre>    },</pre></td></tr>
+<tr id="L37"><td class="lno">37</td><td><pre>    {</pre></td></tr>
+<tr id="L38"><td class="lno">38</td><td><pre>      &quot;name&quot;: &quot;Upsert Customers (Postgres)&quot;,</pre></td></tr>
+<tr id="L39"><td class="lno">39</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.postgres&quot;,</pre></td></tr>
+<tr id="L40"><td class="lno">40</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L41"><td class="lno">41</td><td><pre>        &quot;operation&quot;: &quot;executeQuery&quot;,</pre></td></tr>
+<tr id="L42"><td class="lno">42</td><td><pre>        &quot;query&quot;: &quot;INSERT INTO customers (id, payload) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET payload = EXCLUDED.payload&quot;</pre></td></tr>
+<tr id="L43"><td class="lno">43</td><td><pre>      },</pre></td></tr>
+<tr id="L44"><td class="lno">44</td><td><pre>      &quot;credentials&quot;: { &quot;postgres&quot;: { &quot;id&quot;: &quot;3&quot;, &quot;name&quot;: &quot;Postgres - Reporting&quot; } },</pre></td></tr>
+<tr id="L45"><td class="lno">45</td><td><pre>      &quot;retryOnFail&quot;: true,</pre></td></tr>
+<tr id="L46"><td class="lno">46</td><td><pre>      &quot;continueOnFail&quot;: true</pre></td></tr>
+<tr id="L47"><td class="lno">47</td><td><pre>    },</pre></td></tr>
+<tr id="L48"><td class="lno">48</td><td><pre>    {</pre></td></tr>
+<tr id="L49"><td class="lno">49</td><td><pre>      &quot;name&quot;: &quot;Notify Ops on Success (Slack)&quot;,</pre></td></tr>
+<tr id="L50"><td class="lno">50</td><td><pre>      &quot;type&quot;: &quot;n8n-nodes-base.slack&quot;,</pre></td></tr>
+<tr id="L51"><td class="lno">51</td><td><pre>      &quot;parameters&quot;: {</pre></td></tr>
+<tr id="L52"><td class="lno">52</td><td><pre>        &quot;operation&quot;: &quot;post&quot;,</pre></td></tr>
+<tr id="L53"><td class="lno">53</td><td><pre>        &quot;channel&quot;: &quot;={{ $env.OPS_SLACK_CHANNEL }}&quot;,</pre></td></tr>
+<tr id="L54"><td class="lno">54</td><td><pre>        &quot;text&quot;: &quot;Daily customer sync completed.&quot;</pre></td></tr>
+<tr id="L55"><td class="lno">55</td><td><pre>      },</pre></td></tr>
+<tr id="L56"><td class="lno">56</td><td><pre>      &quot;credentials&quot;: { &quot;slackApi&quot;: { &quot;id&quot;: &quot;4&quot;, &quot;name&quot;: &quot;Slack - Ops&quot; } },</pre></td></tr>
+<tr id="L57"><td class="lno">57</td><td><pre>      &quot;retryOnFail&quot;: true,</pre></td></tr>
+<tr id="L58"><td class="lno">58</td><td><pre>      &quot;continueOnFail&quot;: true</pre></td></tr>
+<tr id="L59"><td class="lno">59</td><td><pre>    }</pre></td></tr>
+<tr id="L60"><td class="lno">60</td><td><pre>  ],</pre></td></tr>
+<tr id="L61"><td class="lno">61</td><td><pre>  &quot;connections&quot;: {</pre></td></tr>
+<tr id="L62"><td class="lno">62</td><td><pre>    &quot;Every Morning Trigger&quot;: {</pre></td></tr>
+<tr id="L63"><td class="lno">63</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Fetch Customer Records (Airtable)&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L64"><td class="lno">64</td><td><pre>    },</pre></td></tr>
+<tr id="L65"><td class="lno">65</td><td><pre>    &quot;Fetch Customer Records (Airtable)&quot;: {</pre></td></tr>
+<tr id="L66"><td class="lno">66</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Enrich via Internal API&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L67"><td class="lno">67</td><td><pre>    },</pre></td></tr>
+<tr id="L68"><td class="lno">68</td><td><pre>    &quot;Enrich via Internal API&quot;: {</pre></td></tr>
+<tr id="L69"><td class="lno">69</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Upsert Customers (Postgres)&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L70"><td class="lno">70</td><td><pre>    },</pre></td></tr>
+<tr id="L71"><td class="lno">71</td><td><pre>    &quot;Upsert Customers (Postgres)&quot;: {</pre></td></tr>
+<tr id="L72"><td class="lno">72</td><td><pre>      &quot;main&quot;: [[{ &quot;node&quot;: &quot;Notify Ops on Success (Slack)&quot;, &quot;type&quot;: &quot;main&quot;, &quot;index&quot;: 0 }]]</pre></td></tr>
+<tr id="L73"><td class="lno">73</td><td><pre>    }</pre></td></tr>
+<tr id="L74"><td class="lno">74</td><td><pre>  },</pre></td></tr>
+<tr id="L75"><td class="lno">75</td><td><pre>  &quot;settings&quot;: {</pre></td></tr>
+<tr id="L76"><td class="lno">76</td><td><pre>    &quot;errorWorkflow&quot;: &quot;error-handler-workflow-id-001&quot;</pre></td></tr>
+<tr id="L77"><td class="lno">77</td><td><pre>  }</pre></td></tr>
+<tr id="L78"><td class="lno">78</td><td><pre>}</pre></td></tr></table>
+  </details>
+</main>
+<footer>
+  n8n Workflow Auditor v3 (local, rules-driven) &middot; static analysis &middot;
+  rules: built-in defaults
+</footer>
+</body></html>
