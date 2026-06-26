@@ -1,0 +1,92 @@
+{
+  "name": "Customer Intake & Enrichment (INSECURE TEST FIXTURE)",
+  "nodes": [
+    {
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "*",
+        "authentication": "none",
+        "httpMethod": "POST"
+      }
+    },
+    {
+      "name": "Set",
+      "type": "n8n-nodes-base.set",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "db_password", "value": "admin123" },
+            { "name": "aws_key", "value": "AKIAIOSFODNN7EXAMPLE" },
+            { "name": "aws_secret", "value": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" },
+            { "name": "stripe", "value": "sk_live_4eC39HqLyjWDarjtT1zdp7dc00aBcDeFgH" },
+            { "name": "github_pat", "value": "ghp_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789" },
+            { "name": "contact_email", "value": "ops@axos.com" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api.acme.com/enrich",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer sk-AbCdEf1234567890abcdef1234567890ABCD" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Node1",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "parameters": {
+        "text": "Summarize the following customer record and respond with the next action to take based on the input data provided by the caller without any further checks."
+      }
+    },
+    {
+      "name": "Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO customers (data) VALUES ($1)",
+        "password": "P@ssw0rd-literal-in-json"
+      }
+    },
+    {
+      "name": "Node1",
+      "type": "n8n-nodes-base.noOp",
+      "parameters": {}
+    },
+    {
+      "name": "Dangling Cleanup",
+      "type": "n8n-nodes-base.code",
+      "disabled": true,
+      "parameters": {
+        "jsCode": "// leftover dead code\nconst token='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c'; return items;"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Set", "type": "main", "index": 0 }]]
+    },
+    "Set": {
+      "main": [[{ "node": "HTTP Request", "type": "main", "index": 0 }]]
+    },
+    "HTTP Request": {
+      "main": [[{ "node": "Node1", "type": "main", "index": 0 }]]
+    },
+    "Node1": {
+      "main": [[{ "node": "Postgres", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {},
+  "pinData": {
+    "Webhook": [
+      { "json": { "email": "leaked.customer@example.com", "ssn": "123-45-6789" } }
+    ]
+  }
+}
+
