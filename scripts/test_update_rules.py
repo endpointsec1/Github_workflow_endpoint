@@ -11,11 +11,18 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 def load(modname, path):
     spec = importlib.util.spec_from_file_location(modname, path)
     m = importlib.util.module_from_spec(spec)
-    sys.modules[modname] = m
+    sys.modules[modname] = m          # required so @dataclass resolves
     spec.loader.exec_module(m)
     return m
 
-ur = load("update_rules_hardened", os.path.join(HERE, "update_rules_hardened.py"))
+# Import the updater regardless of which filename it's committed under.
+_candidates = ["update_rules.py", "update_rules_hardened.py"]
+_target = next((os.path.join(HERE, c) for c in _candidates
+                if os.path.exists(os.path.join(HERE, c))), None)
+if _target is None:
+    print("ERROR: could not find update_rules.py next to the test", file=sys.stderr)
+    sys.exit(2)
+ur = load("update_rules", _target)
 
 PASS, FAIL = 0, 0
 def check(name, cond):
