@@ -1,0 +1,589 @@
+# =============================================================================
+# n8n Audit Rules Configuration (AUTO-GENERATED — hardened updater)
+# =============================================================================
+# Generated: 2026-06-26T19:04:35Z
+# Do NOT edit manually. Run 'python scripts/update_rules.py' to regenerate.
+# =============================================================================
+
+version: "auto-2026-06-26"
+generated_at: "2026-06-26T19:04:35Z"
+generated_by: "update_rules.py (hardened v2)"
+degraded_run: true
+
+# -- Provenance (pinned refs + sha256 of fetched bytes) --
+provenance:
+  pins:
+    gitleaks: v8.21.2
+    owasp_top10: master
+    atlas: main
+    n8n: "n8n@1.70.0"
+  sources:
+    gitleaks_toml:
+      url: "https://raw.githubusercontent.com/gitleaks/gitleaks/v8.21.2/config/gitleaks.toml"
+      ok: true
+      used_fallback: false
+      sha256: 2ce9d818ed5aac0d9a36638a317284bd733c26d5069c980829335183397430bb
+      count: 64
+    owasp_top10_index:
+      url: "https://raw.githubusercontent.com/OWASP/Top10/master/2025/docs/en/index.md"
+      ok: true
+      used_fallback: false
+      sha256: 1453d2fdbd268031b13a9e89619fb044b5e92373c3e26c2fb9f633a22df26e65
+      count: 10
+    owasp_llm_top10:
+      url: "https://genai.owasp.org/llm-top-10/"
+      ok: true
+      used_fallback: false
+      sha256: 250bbae92dc3ea264d452fa4a60f4fe1afff6845ae31755ab2231a7e6c7268a1
+      count: 10
+    atlas_stix:
+      url: "https://raw.githubusercontent.com/mitre-atlas/atlas-navigator-data/main/dist/stix-atlas.json"
+      ok: true
+      used_fallback: false
+      sha256: a1bd782257de3c8591797ac863aa9b37fe4ae42ef9284bee98bfc2661fdd1c06
+      count: 170
+    n8n_langchain_pkg:
+      url: "https://raw.githubusercontent.com/n8n-io/n8n/n8n@1.70.0/packages/%40n8n/nodes-langchain/package.json"
+      ok: true
+      used_fallback: false
+      sha256: 365e93ef8843790e6cc3b30a5e203a7241947aece0e0b0785627055a21faca67
+      count: 14
+    n8n_nodes_base_pkg:
+      url: "https://raw.githubusercontent.com/n8n-io/n8n/n8n@1.70.0/packages/nodes-base/package.json"
+      ok: true
+      used_fallback: false
+      sha256: e1aec35e65b5e3d138cd4d55cc6d8cf64d03a6f3f8ff6b7038f7260d4e71d9d9
+      count: 16
+  regexes_rejected: 131
+
+framework_references:
+  owasp_top10:
+    version: "2025"
+    source: "https://github.com/OWASP/Top10"
+    categories:
+      - id: "A01:2025"
+        title: Broken Access Control
+      - id: "A02:2025"
+        title: Security Misconfiguration
+      - id: "A03:2025"
+        title: Software Supply Chain Failures
+      - id: "A04:2025"
+        title: Cryptographic Failures
+      - id: "A05:2025"
+        title: Injection
+      - id: "A06:2025"
+        title: Insecure Design
+      - id: "A07:2025"
+        title: Authentication Failures
+      - id: "A08:2025"
+        title: Software or Data Integrity Failures
+      - id: "A09:2025"
+        title: Security Logging and Alerting Failures
+      - id: "A10:2025"
+        title: Mishandling of Exceptional Conditions
+
+  owasp_llm_top10:
+    version: "2025"
+    source: "https://genai.owasp.org/llm-top-10/"
+    categories:
+      - id: "LLM01:2025"
+        title: Prompt Injection
+      - id: "LLM02:2025"
+        title: Sensitive Information Disclosure
+      - id: "LLM03:2025"
+        title: Supply Chain
+      - id: "LLM04:2025"
+        title: Data and Model Poisoning
+      - id: "LLM05:2025"
+        title: Improper Output Handling
+      - id: "LLM06:2025"
+        title: Excessive Agency
+      - id: "LLM07:2025"
+        title: System Prompt Leakage
+      - id: "LLM08:2025"
+        title: Vector and Embedding Weaknesses
+      - id: "LLM09:2025"
+        title: Misinformation
+      - id: "LLM10:2025"
+        title: Unbounded Consumption
+
+  mitre_atlas:
+    version: 0.1
+    technique_count: 170
+    source: "https://github.com/mitre-atlas/atlas-navigator-data"
+    format: "STIX 2.1"
+
+  nist_ssdf:
+    version: "NIST SP 800-218A"
+    source: "https://csrc.nist.gov/pubs/sp/800/218/a/final"
+    note: "No machine-readable API; reference only"
+
+# -- Secret Detection Patterns (from gitleaks upstream, regex-validated) --
+# Pattern count: 64
+secret_patterns:
+  - rule_id: "SEC-1PASSWORD-SERVICE-ACCOUNT-TOKEN"
+    regex: "''ops_eyJ[a-zA-Z0-9+/]{250,}={0,3}''"
+    severity: high
+    confidence: high
+    description: "Uncovered a possible 1Password service account token, potentially compromising access to secrets in vaults."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-AGE-SECRET-KEY"
+    regex: "''AGE-SECRET-KEY-1[QPZRY9X8GF2TVDW0S3JN54KHCE6MUA7L]{58}''"
+    severity: high
+    confidence: high
+    description: "Discovered a potential Age encryption tool secret key, risking data decryption and unauthorized access to sensitive information."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-AWS-ACCESS-TOKEN"
+    regex: "''\\b((?:A3T[A-Z0-9]|AKIA|ASIA|ABIA|ACCA)[A-Z0-9]{16})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Identified a pattern that may indicate AWS credentials, risking unauthorized cloud resource access and data breaches on AWS platforms."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-AZURE-AD-CLIENT-SECRET"
+    regex: "''(?:^|[\\\\'\"\\x60\\s>=:(,)])([a-zA-Z0-9_~.]{3}\\dQ~[a-zA-Z0-9_~.-]{31,34})(?:$|[\\\\'\"\\x60\\s<),])''"
+    severity: high
+    confidence: high
+    description: Azure AD Client Secret
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-CLOUDFLARE-ORIGIN-CA-KEY"
+    regex: "''\\b(v1\\.0-[a-f0-9]{24}-[a-f0-9]{146})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected a Cloudflare Origin CA Key, potentially compromising cloud application deployments and operational security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-COHERE-API-TOKEN"
+    regex: "''[\\w.-]{0,10}?(?i:[\\w.-]{0,10}?(?:cohere|CO_API_KEY)(?:[ \\t\\w.-]{0,20})(?:[\\s|']|[\\s|\"]){0,3})(?:=|>|:{1,3}=|\\|\\|:|<=|=>|:|\\?=)(?:'|\\\"|\\s|=|\\x60){0,5}([a-zA-Z0-9]{40})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Identified a Cohere Token, posing a risk of unauthorized access to AI services and data manipulation."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-DATABRICKS-API-TOKEN"
+    regex: "''\\b(dapi[a-f0-9]{32}(?:-\\d)?)(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Uncovered a Databricks API token, which may compromise big data analytics platforms and sensitive data processing."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-DIGITALOCEAN-ACCESS-TOKEN"
+    regex: "''\\b(doo_v1_[a-f0-9]{64})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Found a DigitalOcean OAuth Access Token, risking unauthorized cloud resource access and data compromise."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-DIGITALOCEAN-PAT"
+    regex: "''\\b(dop_v1_[a-f0-9]{64})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Discovered a DigitalOcean Personal Access Token, posing a threat to cloud infrastructure security and data privacy."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-FLYIO-ACCESS-TOKEN"
+    regex: "''\\b((?:fo1_[\\w-]{43}|fm1[ar]_[a-zA-Z0-9+\\/]{100,}={0,3}|fm2_[a-zA-Z0-9+\\/]{100,}={0,3}))(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: Uncovered a Fly.io API key
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GCP-API-KEY"
+    regex: "''\\b(AIza[\\w-]{35})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Uncovered a GCP API key, which could lead to unauthorized access to Google Cloud services and data breaches."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITHUB-APP-TOKEN"
+    regex: "''(?:ghu|ghs)_[0-9a-zA-Z]{36}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitHub App Token, which may compromise GitHub application integrations and source code security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITHUB-FINE-GRAINED-PAT"
+    regex: "''github_pat_\\w{82}''"
+    severity: high
+    confidence: high
+    description: "Found a GitHub Fine-Grained Personal Access Token, risking unauthorized repository access and code manipulation."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITHUB-OAUTH"
+    regex: "''gho_[0-9a-zA-Z]{36}''"
+    severity: high
+    confidence: high
+    description: "Discovered a GitHub OAuth Access Token, posing a risk of compromised GitHub account integrations and data leaks."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITHUB-PAT"
+    regex: "''ghp_[0-9a-zA-Z]{36}''"
+    severity: high
+    confidence: high
+    description: "Uncovered a GitHub Personal Access Token, potentially leading to unauthorized repository access and sensitive content exposure."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITHUB-REFRESH-TOKEN"
+    regex: "''ghr_[0-9a-zA-Z]{36}''"
+    severity: high
+    confidence: high
+    description: "Detected a GitHub Refresh Token, which could allow prolonged unauthorized access to GitHub services."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-CICD-JOB-TOKEN"
+    regex: "''glcbt-[0-9a-zA-Z]{1,5}_[0-9a-zA-Z_-]{20}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab CI/CD Job Token, potential access to projects and some APIs on behalf of a user while the CI job is running."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-DEPLOY-TOKEN"
+    regex: "''gldt-[0-9a-zA-Z_\\-]{20}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab Deploy Token, risking access to repositories, packages and containers with write access."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-FEATURE-FLAG-CLIENT-TOKEN"
+    regex: "''glffct-[0-9a-zA-Z_\\-]{20}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab feature flag client token, risks exposing user lists and features flags used by an application."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-FEED-TOKEN"
+    regex: "''glft-[0-9a-zA-Z_\\-]{20}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab feed token, risking exposure of user data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-INCOMING-MAIL-TOKEN"
+    regex: "''glimt-[0-9a-zA-Z_\\-]{25}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab incoming mail token, risking manipulation of data sent by mail."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-KUBERNETES-AGENT-TOKEN"
+    regex: "''glagent-[0-9a-zA-Z_\\-]{50}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab Kubernetes Agent token, risking access to repos and registry of projects connected via agent."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-OAUTH-APP-SECRET"
+    regex: "''gloas-[0-9a-zA-Z_\\-]{64}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab OIDC Application Secret, risking access to apps using GitLab as authentication provider."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-PAT"
+    regex: "''glpat-[\\w-]{20}''"
+    severity: high
+    confidence: high
+    description: "Identified a GitLab Personal Access Token, risking unauthorized access to GitLab repositories and codebase exposure."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-PTT"
+    regex: "''glptt-[0-9a-f]{40}''"
+    severity: high
+    confidence: high
+    description: "Found a GitLab Pipeline Trigger Token, potentially compromising continuous integration workflows and project security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-RRT"
+    regex: "''GR1348941[\\w-]{20}''"
+    severity: high
+    confidence: high
+    description: "Discovered a GitLab Runner Registration Token, posing a risk to CI/CD pipeline integrity and unauthorized access."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-RUNNER-AUTHENTICATION-TOKEN"
+    regex: "''glrt-[0-9a-zA-Z_\\-]{20}''"
+    severity: high
+    confidence: high
+    description: "Discovered a GitLab Runner Authentication Token, posing a risk to CI/CD pipeline integrity and unauthorized access."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-SCIM-TOKEN"
+    regex: "''glsoat-[0-9a-zA-Z_\\-]{20}''"
+    severity: high
+    confidence: high
+    description: "Discovered a GitLab SCIM Token, posing a risk to unauthorized access for a organization or instance."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-GITLAB-SESSION-COOKIE"
+    regex: "''_gitlab_session=[0-9a-z]{32}''"
+    severity: high
+    confidence: high
+    description: "Discovered a GitLab Session Cookie, posing a risk to unauthorized access to a user account."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-HARNESS-API-KEY"
+    regex: "''(?:pat|sat)\\.[a-zA-Z0-9_-]{22}\\.[a-zA-Z0-9]{24}\\.[a-zA-Z0-9]{20}''"
+    severity: high
+    confidence: high
+    description: "Identified a Harness Access Token (PAT or SAT), risking unauthorized access to a Harness account."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-HUGGINGFACE-ACCESS-TOKEN"
+    regex: "''(?:^|[\\\\'\"` >=:])(hf_[a-zA-Z]{34})(?:$|[\\\\'\"` <])''"
+    severity: high
+    confidence: high
+    description: "Discovered a Hugging Face Access token, which could lead to unauthorized access to AI models and sensitive data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-HUGGINGFACE-ORGANIZATION-API-TOKEN"
+    regex: "''(?:^|[\\\\'\"` >=:\\(,)])(api_org_[a-zA-Z]{34})(?:$|[\\\\'\"` <\\),])''"
+    severity: high
+    confidence: high
+    description: "Uncovered a Hugging Face Organization API token, potentially compromising AI organization accounts and associated data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-INFRACOST-API-TOKEN"
+    regex: "''\\b(ico-[a-zA-Z0-9]{32})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected an Infracost API Token, risking unauthorized access to cloud cost estimation tools and financial data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-JWT"
+    regex: "''\\b(ey[a-zA-Z0-9]{17,}\\.ey[a-zA-Z0-9\\/\\\\_-]{17,}\\.(?:[a-zA-Z0-9\\/\\\\_-]{10,}={0,2})?)(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Uncovered a JSON Web Token, which may lead to unauthorized access to web applications and sensitive user data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-MICROSOFT-TEAMS-WEBHOOK"
+    regex: "''https://[a-z0-9]+\\.webhook\\.office\\.com/webhookb2/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}@[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}/IncomingWebhook/[a-z0-9]{32}/[a-z0-9]{8}-([a-z0-9]{4}-){3}[a-z0-9]{12}''"
+    severity: high
+    confidence: high
+    description: "Uncovered a Microsoft Teams Webhook, which could lead to unauthorized access to team collaboration tools and data leaks."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-OCTOPUS-DEPLOY-API-KEY"
+    regex: "''\\b(API-[A-Z0-9]{26})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Discovered a potential Octopus Deploy API key, risking application deployments and operational security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-OKTA-ACCESS-TOKEN"
+    regex: "''[\\w.-]{0,10}?(?i:[\\w.-]{0,10}?(?:(?-i:[Oo]kta|OKTA))(?:[ \\t\\w.-]{0,20})(?:[\\s|']|[\\s|\"]){0,3})(?:=|>|:{1,3}=|\\|\\|:|<=|=>|:|\\?=)(?:'|\\\"|\\s|=|\\x60){0,5}(00[\\w=\\-]{40})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Identified an Okta Access Token, which may compromise identity management services and user authentication data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-OPENAI-API-KEY"
+    regex: "''\\b(sk-[a-zA-Z0-9]{20}T3BlbkFJ[a-zA-Z0-9]{20})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Found an OpenAI API Key, posing a risk of unauthorized access to AI services and data manipulation."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-PLANETSCALE-OAUTH-TOKEN"
+    regex: "''\\b(pscale_oauth_[\\w=\\.-]{32,64})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Found a PlanetScale OAuth token, posing a risk to database access control and sensitive data integrity."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-PREFECT-API-TOKEN"
+    regex: "''\\b(pnu_[a-zA-Z0-9]{36})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected a Prefect API token, risking unauthorized access to workflow management and automation services."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-PRIVATEAI-API-TOKEN"
+    regex: "''[\\w.-]{0,10}?(?i:[\\w.-]{0,10}?(?:private[_-]?ai)(?:[ \\t\\w.-]{0,20})(?:[\\s|']|[\\s|\"]){0,3})(?:=|>|:{1,3}=|\\|\\|:|<=|=>|:|\\?=)(?:'|\\\"|\\s|=|\\x60){0,5}([a-z0-9]{32})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Identified a PrivateAI Token, posing a risk of unauthorized access to AI services and data manipulation."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-PULUMI-API-TOKEN"
+    regex: "''\\b(pul-[a-f0-9]{40})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Found a Pulumi API token, posing a risk to infrastructure as code services and cloud resource management."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-PYPI-UPLOAD-TOKEN"
+    regex: "''pypi-AgEIcHlwaS5vcmc[\\w-]{50,1000}''"
+    severity: high
+    confidence: high
+    description: "Discovered a PyPI upload token, potentially compromising Python package distribution and repository integrity."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-README-API-TOKEN"
+    regex: "''\\b(rdme_[a-z0-9]{70})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected a Readme API token, risking unauthorized documentation management and content exposure."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-RUBYGEMS-API-TOKEN"
+    regex: "''\\b(rubygems_[a-f0-9]{48})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Identified a Rubygem API token, potentially compromising Ruby library distribution and package management."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SCALINGO-API-TOKEN"
+    regex: "''\\b(tk-us-[\\w-]{48})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Found a Scalingo API token, posing a risk to cloud platform services and application deployment security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SHIPPO-API-TOKEN"
+    regex: "''\\b(shippo_(?:live|test)_[a-fA-F0-9]{40})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Discovered a Shippo API token, potentially compromising shipping services and customer order data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SHOPIFY-ACCESS-TOKEN"
+    regex: "''shpat_[a-fA-F0-9]{32}''"
+    severity: high
+    confidence: high
+    description: "Uncovered a Shopify access token, which could lead to unauthorized e-commerce platform access and data breaches."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SHOPIFY-CUSTOM-ACCESS-TOKEN"
+    regex: "''shpca_[a-fA-F0-9]{32}''"
+    severity: high
+    confidence: high
+    description: "Detected a Shopify custom access token, potentially compromising custom app integrations and e-commerce data security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SHOPIFY-PRIVATE-APP-ACCESS-TOKEN"
+    regex: "''shppa_[a-fA-F0-9]{32}''"
+    severity: high
+    confidence: high
+    description: "Identified a Shopify private app access token, risking unauthorized access to private app data and store operations."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SHOPIFY-SHARED-SECRET"
+    regex: "''shpss_[a-fA-F0-9]{32}''"
+    severity: high
+    confidence: high
+    description: "Found a Shopify shared secret, posing a risk to application authentication and e-commerce platform security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SLACK-BOT-TOKEN"
+    regex: "''xoxb-[0-9]{10,13}-[0-9]{10,13}[a-zA-Z0-9-]*''"
+    severity: high
+    confidence: high
+    description: "Identified a Slack Bot token, which may compromise bot integrations and communication channel security."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SLACK-LEGACY-BOT-TOKEN"
+    regex: "''xoxb-[0-9]{8,14}-[a-zA-Z0-9]{18,26}''"
+    severity: high
+    confidence: high
+    description: "Uncovered a Slack Legacy bot token, which could lead to compromised legacy bot operations and data exposure."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SLACK-LEGACY-TOKEN"
+    regex: "''xox[os]-\\d+-\\d+-\\d+-[a-fA-F\\d]+''"
+    severity: high
+    confidence: high
+    description: "Detected a Slack Legacy token, risking unauthorized access to older Slack integrations and user data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SLACK-LEGACY-WORKSPACE-TOKEN"
+    regex: "''xox[ar]-(?:\\d-)?[0-9a-zA-Z]{8,48}''"
+    severity: high
+    confidence: high
+    description: "Identified a Slack Legacy Workspace token, potentially compromising access to workspace data and legacy features."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SLACK-USER-TOKEN"
+    regex: "''xox[pe](?:-[0-9]{10,13}){3}-[a-zA-Z0-9-]{28,34}''"
+    severity: high
+    confidence: high
+    description: "Found a Slack User token, posing a risk of unauthorized user impersonation and data access within Slack workspaces."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SLACK-WEBHOOK-URL"
+    regex: "''(?:https?://)?hooks.slack.com/(?:services|workflows)/[A-Za-z0-9+/]{43,46}''"
+    severity: high
+    confidence: high
+    description: "Discovered a Slack Webhook, which could lead to unauthorized message posting and data leakage in Slack channels."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SQUARE-ACCESS-TOKEN"
+    regex: "''\\b((?:EAAA|sq0atp-)[\\w-]{22,60})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected a Square Access Token, risking unauthorized payment processing and financial transaction exposure."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-STRIPE-ACCESS-TOKEN"
+    regex: "''\\b((?:sk|rk)_(?:test|live|prod)_[a-zA-Z0-9]{10,99})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Found a Stripe Access Token, posing a risk to payment processing services and sensitive financial data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-SUMOLOGIC-ACCESS-ID"
+    regex: "''[\\w.-]{0,10}?(?i:[\\w.-]{0,10}?(?:(?-i:[Ss]umo|SUMO))(?:[ \\t\\w.-]{0,20})(?:[\\s|']|[\\s|\"]){0,3})(?:=|>|:{1,3}=|\\|\\|:|<=|=>|:|\\?=)(?:'|\\\"|\\s|=|\\x60){0,5}(su[a-zA-Z0-9]{12})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Discovered a SumoLogic Access ID, potentially compromising log management services and data analytics integrity."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-TELEGRAM-BOT-API-TOKEN"
+    regex: "''(?i:telegr(?:[0-9a-z\\(-_\\t .\\\\]{0,40})(?:[\\s|']|[\\s|\"]){0,3})(?:=|\\|\\|:|<=|=>|:|\\?=|\\()(?:'|\\\"|\\s|=|\\x60){0,5}([0-9]{5,16}:A[a-z0-9_\\-]{34})(?:['|\\\"|\\n|\\r|\\s|\\x60|;|\\\\]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected a Telegram Bot API Token, risking unauthorized bot operations and message interception on Telegram."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-TWILIO-API-KEY"
+    regex: "''SK[0-9a-fA-F]{32}''"
+    severity: high
+    confidence: high
+    description: "Found a Twilio API Key, posing a risk to communication services and sensitive customer interaction data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-VAULT-BATCH-TOKEN"
+    regex: "''\\b(hvb\\.[\\w-]{138,300})(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Detected a Vault Batch Token, risking unauthorized access to secret management services and sensitive data."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+  - rule_id: "SEC-VAULT-SERVICE-TOKEN"
+    regex: "''\\b((?:hvs\\.[\\w-]{90,120}|s\\.(?i:[a-z0-9]{24})))(?:['|\\\"|\\n|\\r|\\s|\\x60|;]|$)''"
+    severity: high
+    confidence: high
+    description: "Identified a Vault Service Token, potentially compromising infrastructure security and access to sensitive credentials."
+    owasp: "A04:2025 (Cryptographic Failures) / A07:2025 (Authentication Failures)"
+
+# -- AI / LangChain Node Types --
+ai_node_prefixes:
+  - "@n8n/n8n-nodes-langchain"
+  # Sub-category: agents
+  # Sub-category: chains
+  # Sub-category: code
+  # Sub-category: document_loaders
+  # Sub-category: embeddings
+  # Sub-category: llms
+  # Sub-category: memory
+  # Sub-category: output_parser
+  # Sub-category: retrievers
+  # Sub-category: text_splitters
+  # Sub-category: tools
+  # Sub-category: trigger
+  # Sub-category: vector_store
+  # Sub-category: vendors
+
+# -- Risky Node Patterns (need error handling) --
+risky_node_patterns:
+  - pattern: airtable
+    recommendation: Validate record/document IDs before execution; add an Error Workflow.
+  - pattern: code
+    recommendation: Custom Code nodes throw on runtime errors; wrap in try/catch.
+  - pattern: discord
+    recommendation: "External APIs can rate-limit; add Error Workflows + fallback channel."
+  - pattern: email
+    recommendation: "External APIs can rate-limit; add Error Workflows + fallback channel."
+  - pattern: function
+    recommendation: Enable Retry on Fail and add an Error Workflow.
+  - pattern: gmail
+    recommendation: "External APIs can rate-limit; add Error Workflows + fallback channel."
+  - pattern: googleSheets
+    recommendation: Validate record/document IDs before execution; add an Error Workflow.
+  - pattern: httpRequest
+    recommendation: "Enable Retry on Fail, set a timeout, and consider Continue On Error."
+  - pattern: mongodb
+    recommendation: Wrap DB ops with Continue On Error and validate inputs.
+  - pattern: mysql
+    recommendation: Wrap DB ops with Continue On Error and validate inputs.
+  - pattern: postgres
+    recommendation: Wrap DB ops with Continue On Error and validate inputs.
+  - pattern: redis
+    recommendation: Wrap DB ops with Continue On Error and validate inputs.
+  - pattern: sendgrid
+    recommendation: "External APIs can rate-limit; add Error Workflows + fallback channel."
+  - pattern: slack
+    recommendation: "External APIs can rate-limit; add Error Workflows + fallback channel."
+  - pattern: snowflake
+    recommendation: Wrap DB ops with Continue On Error and validate inputs.
+  - pattern: telegram
+    recommendation: "External APIs can rate-limit; add Error Workflows + fallback channel."
+
+# -- Verdict Thresholds --
+verdict:
+  max_medium_before_fail: 5
+  fail_on_any_high: true
+  fail_on_no_error_workflow: true
+  fail_on_open_webhook: true
+  fail_on_prompt_injection_path: true
+  fail_on_hardcoded_secret: true
+  fail_on_pindata_shipped: true
+
+# -- Guardrail Keywords (for AI prompt checks) --
+guardrail_keywords:
+  - do not
+  - never
+  - refuse
+  - safe
+  - guardrail
+  - policy
+  - filter
+  - reject
+  - deny
+  - block
+  - restrict
+  - prohibited
+  - forbidden
+  - must not
+  - not allowed
+
