@@ -1,0 +1,100 @@
+# =============================================================================
+# refresh-rules.yml  —  Pipeline A: deliberate, reviewed rule updates
+# =============================================================================
+# This is the ONLY place audit_rules.yaml is regenerated. It runs on a schedule
+# (or manually), validates the fetched frameworks, runs the golden round-trip
+# against the test fixtures, and opens a PR. A human reviews the regex/category
+# diff before it can affect the gate. The audit job (audit-n8n.yml) never
+# touches the network — it uses the committed, frozen rules.
+# =============================================================================
+
+name: Refresh Audit Rules
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"          # Mondays 06:00 UTC
+  workflow_dispatch:
+    inputs:
+      allow_fallback:
+        description: "Permit hardcoded fallbacks if an upstream source is degraded"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    name: Regenerate, validate, round-trip, open PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install scanner dependency
+        run: pip install pyyaml
+
+      # ── 1. Regenerate rules (STRICT by default: fail-closed) ──
+      - name: Generate audit_rules.yaml (hardened, validated)
+        id: gen
+        run: |
+          FLAG=""
+          if [ "${{ github.event.inputs.allow_fallback }}" = "true" ]; then
+            FLAG="--allow-fallback"
+          fi
+          echo "::group::update_rules.py $FLAG"
+          python3 scripts/update_rules.py $FLAG --output scripts/audit_rules.yaml
+          echo "::endgroup::"
+        # If a source silently broke (e.g. gitleaks < 100 patterns), update_rules.py
+        # exits 1 here and the whole job fails — the gate is never weakened silently.
+
+      # ── 2. Unit tests for the updater itself ──
+      - name: Unit-test the updater
+        run: python3 scripts/test_update_rules.py
+
+      # ── 3. Golden round-trip: rules must still classify fixtures correctly ──
+      - name: Golden round-trip (bad must FAIL, good must PASS)
+        run: |
+          set +e
+          python3 scripts/n8n_audit_v3.py tests/fixtures/bad-workflow.json \
+            --rules scripts/audit_rules.yaml -o /tmp/bad.html --json /tmp/bad.json
+          BAD=$?
+          python3 scripts/n8n_audit_v3.py tests/fixtures/good-workflow.json \
+            --rules scripts/audit_rules.yaml -o /tmp/good.html --json /tmp/good.json
+          GOOD=$?
+          set -e
+          echo "bad exit=$BAD (expect 1) | good exit=$GOOD (expect 0)"
+          if [ "$BAD" != "1" ] || [ "$GOOD" != "0" ]; then
+            echo "::error::Golden round-trip failed: the regenerated rules no longer classify the fixtures correctly. Refusing to open a PR."
+            exit 1
+          fi
+
+      # ── 4. Open a reviewed PR with the new rules ──
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore(rules): refresh audit_rules.yaml from pinned upstreams"
+          branch: automated/refresh-audit-rules
+          delete-branch: true
+          title: "Refresh audit rules (review regex/category diff before merge)"
+          body: |
+            Automated regeneration of `scripts/audit_rules.yaml` from the pinned
+            upstream sources (see the `provenance:` block in the file for exact
+            refs + sha256 hashes).
+
+            ✅ Updater unit tests passed
+            ✅ Golden round-trip passed (bad→FAIL, good→PASS)
+
+            **Reviewer checklist**
+            - [ ] Skim the secret-pattern regex diff for anything unexpected
+            - [ ] Confirm OWASP / ATLAS category changes are intended
+            - [ ] Confirm `degraded_run: false` (or accept a justified degraded run)
+          labels: |
+            automated
+            security-rules
