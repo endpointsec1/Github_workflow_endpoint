@@ -33,7 +33,7 @@ on:
         default: ""
 
 permissions:
-  contents: read    # This repo only needs read (we push to the other repo via PAT)
+  contents: read
 
 jobs:
   audit:
@@ -46,7 +46,7 @@ jobs:
       - name: Checkout source repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0    # Full history for git diff change detection
+          fetch-depth: 0
 
       # ── 2. Set up Python ──
       - name: Set up Python 3.12
@@ -90,6 +90,9 @@ jobs:
         id: audit
         if: steps.detect.outputs.file_count != '0'
         run: |
+          # ← CHANGED: Write results to a dedicated path that won't get clobbered
+          mkdir -p ${{ runner.temp }}/audit-results
+
           OVERALL_STATUS="PASS"
 
           while IFS= read -r wf_file; do
@@ -99,19 +102,14 @@ jobs:
               continue
             fi
 
-            # Derive a clean name from the filename
             WF_NAME=$(basename "$wf_file" .json)
-            mkdir -p "results/$WF_NAME"
+            mkdir -p "${{ runner.temp }}/audit-results/$WF_NAME"
 
             echo "::group::Auditing $wf_file"
 
-            # Run the auditor
-            #   -o  → HTML report
-            #   --json → machine-readable findings
-            #   -c  → company identifiers to flag (add your own)
             python3 scripts/n8n_audit_v3.py "$wf_file" \
-              -o "results/$WF_NAME/audit_report.html" \
-              --json "results/$WF_NAME/findings.json" \
+              -o "${{ runner.temp }}/audit-results/$WF_NAME/audit_report.html" \
+              --json "${{ runner.temp }}/audit-results/$WF_NAME/findings.json" \
               -c "Axos" \
               -c "AxosFinancial" \
               && WF_STATUS="PASS" || WF_STATUS="FAIL"
@@ -128,18 +126,27 @@ jobs:
           echo "overall_status=$OVERALL_STATUS" >> "$GITHUB_OUTPUT"
           echo "::notice::Overall audit verdict: $OVERALL_STATUS"
 
+          # ← CHANGED: Verify results were actually created
+          echo "::group::Audit output files"
+          find ${{ runner.temp }}/audit-results -type f
+          echo "::endgroup::"
+
       # ── 5. Upload results as a downloadable artifact ──
       - name: Upload audit artifacts
         if: always() && steps.detect.outputs.file_count != '0'
         uses: actions/upload-artifact@v4
         with:
           name: n8n-audit-results-${{ github.sha }}
-          path: results/
+          path: ${{ runner.temp }}/audit-results/      # ← CHANGED: match new path
           retention-days: 90
 
       # ── 6. Checkout the destination repo ──
+      # ← CHANGED: Runs on push to main AND manual triggers (workflow_dispatch)
       - name: Checkout Github_workflow_endpoint
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.detect.outputs.file_count != '0' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         uses: actions/checkout@v4
         with:
           repository: Jeffrey-Katindig_axosEnt/Github_workflow_endpoint
@@ -148,21 +155,25 @@ jobs:
 
       # ── 7. Push results to Github_workflow_endpoint/results/ ──
       - name: Push results to endpoint repo
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: >-
+          steps.detect.outputs.file_count != '0' &&
+          (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+          (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         run: |
-          # Ensure the results directory exists in the destination repo
+          # Ensure the destination directory exists
           mkdir -p endpoint-repo/results
 
-          # Copy all audit output into the destination
-          cp -r results/* endpoint-repo/results/
+          # ← CHANGED: Copy from the temp path (not from ./results/ which may not exist)
+          cp -r ${{ runner.temp }}/audit-results/* endpoint-repo/results/
 
-          # Write a summary file for traceability
+          # Write traceability summary
           cat > endpoint-repo/results/LAST_RUN.txt <<EOF
           Last audit: $(date -u +%Y-%m-%dT%H:%M:%SZ)
           Source repo: ${{ github.repository }}
           Source commit: ${{ github.sha }}
           Verdict: ${{ steps.audit.outputs.overall_status }}
           Triggered by: ${{ github.actor }}
+          Event: ${{ github.event_name }}
           EOF
 
           cd endpoint-repo
@@ -173,6 +184,9 @@ jobs:
           git commit -m "audit: n8n workflow check — ${{ steps.audit.outputs.overall_status }} [${{ github.sha }}]" \
             || echo "No changes to commit"
           git push
+
+          # ← CHANGED: Verify push succeeded
+          echo "::notice::Results pushed to Github_workflow_endpoint/results/"
 
       # ── 8. Gate: block PR merge if audit fails ──
       - name: Gate — fail if audit verdict is FAIL
