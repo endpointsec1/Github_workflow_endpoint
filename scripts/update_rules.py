@@ -94,7 +94,7 @@ THRESHOLDS = {
 
 # ── Regex safety limits (ReDoS guard) ───────────────────────────────────────
 
-MAX_REGEX_LEN = 400          # reject absurdly long patterns
+MAX_REGEX_LEN = 600          # reject absurdly long patterns
 # Heuristic ReDoS signatures: nested quantifiers like (a+)+ , (a*)* , (a+)*
 REDOS_SIGNATURES = [
     re.compile(r"\([^)]*[+*]\)[+*]"),       # (x+)+  (x*)*
@@ -150,17 +150,43 @@ def fetch_url(url: str, timeout: int = 30) -> Tuple[Optional[str], Optional[str]
 
 # ── Regex safety ────────────────────────────────────────────────────────────
 
+
+def normalize_go_regex(pattern: str) -> str:
+    """Convert a Go/RE2 regex into a Python-compilable, scanner-safe string.
+
+    The scanner compiles secret regexes with re.compile(regex) and NO flags,
+    so any case-insensitivity must live INSIDE the pattern. Python only allows
+    a global (?i) at position 0, so we:
+      - detect (?i) / (?i:...) anywhere,
+      - strip every inline flag marker,
+      - rewrite (?iflag:...) groups to plain (?:...),
+      - and, if case-insensitivity was requested, prepend a single (?i) at the start.
+    Also maps Go \\z -> Python \\Z.
+    """
+    want_i = bool(re.search(r"\(\?[aiLmsux]*i[):]", pattern)) or bool(re.match(r"^\(\?[aiLmsux]*i\)", pattern))
+    # (?flags:...) -> (?:...)
+    pattern = re.sub(r"\(\?[aiLmsux]+:", "(?:", pattern)
+    # bare (?flags) anywhere -> remove
+    pattern = re.sub(r"\(\?[aiLmsux]+\)", "", pattern)
+    pattern = pattern.replace(r"\z", r"\Z")
+    if want_i:
+        pattern = "(?i)" + pattern
+    return pattern
+
+
 def is_regex_safe(pattern: str) -> Tuple[bool, str]:
-    """Compile-check a regex and screen for obvious ReDoS shapes."""
+    """Normalize Go->Python, then compile-check + ReDoS-screen.
+    Returns (ok, reason). The normalized form is what gets shipped."""
     if not pattern:
         return False, "empty"
-    if len(pattern) > MAX_REGEX_LEN:
-        return False, f"too long ({len(pattern)} > {MAX_REGEX_LEN})"
+    norm = normalize_go_regex(pattern)
+    if len(norm) > MAX_REGEX_LEN:
+        return False, f"too long ({len(norm)} > {MAX_REGEX_LEN})"
     for sig in REDOS_SIGNATURES:
-        if sig.search(pattern):
+        if sig.search(norm):
             return False, "possible ReDoS (nested quantifier)"
     try:
-        re.compile(pattern)
+        re.compile(norm)
     except re.error as e:
         return False, f"does not compile: {e}"
     return True, "ok"
@@ -169,24 +195,40 @@ def is_regex_safe(pattern: str) -> Tuple[bool, str]:
 # ── Source Parsers ──────────────────────────────────────────────────────────
 
 def parse_gitleaks_toml(raw: str) -> List[Dict[str, str]]:
-    """Extract [[rules]] (id, description, regex) from gitleaks.toml."""
+    """Parse [[rules]] blocks, handling triple-single-quoted multiline regex
+    (gitleaks stores most regexes as \'\'\'...\'\'\')."""
     patterns: List[Dict[str, str]] = []
+    lines = raw.splitlines()
+    i, n = 0, len(lines)
     current: Dict[str, str] = {}
-    for line in raw.splitlines():
-        stripped = line.strip()
+
+    def flush() -> None:
+        if current.get("id") and current.get("regex"):
+            patterns.append(dict(current))
+
+    while i < n:
+        stripped = lines[i].strip()
         if stripped == "[[rules]]":
-            if current.get("id") and current.get("regex"):
-                patterns.append(current)
-            current = {}
-            continue
+            flush(); current.clear(); i += 1; continue
+        m = re.match(r"^(\w+)\s*=\s*\'\'\'(.*)$", stripped)
+        if m:
+            key, rest = m.group(1), m.group(2)
+            if rest.endswith("\'\'\'") and len(rest) >= 3:
+                current[key] = rest[:-3]; i += 1; continue
+            buf = [rest]; i += 1
+            while i < n:
+                if lines[i].rstrip().endswith("\'\'\'"):
+                    buf.append(lines[i].rstrip()[:-3]); break
+                buf.append(lines[i]); i += 1
+            current[key] = "\n".join(buf); i += 1; continue
         m = re.match(r'^(\w+)\s*=\s*"(.*)"$', stripped)
         if m:
-            current[m.group(1)] = m.group(2)
-        m2 = re.match(r"^(\w+)\s*=\s*'(.*)'$", stripped)
-        if m2:
-            current[m2.group(1)] = m2.group(2)
-    if current.get("id") and current.get("regex"):
-        patterns.append(current)
+            current[m.group(1)] = m.group(2); i += 1; continue
+        m = re.match(r"^(\w+)\s*=\s*\'(.*)\'$", stripped)
+        if m:
+            current[m.group(1)] = m.group(2); i += 1; continue
+        i += 1
+    flush()
     return patterns
 
 
@@ -553,6 +595,9 @@ def main() -> int:
         for p in parse_gitleaks_toml(raw):
             ok, why = is_regex_safe(p.get("regex", ""))
             if ok:
+                # ship the normalized (Python-compilable) form so the scanner,
+                # which compiles with no flags, can use it directly.
+                p["regex"] = normalize_go_regex(p.get("regex", ""))
                 safe_patterns.append(p)
             else:
                 report.regexes_rejected += 1
