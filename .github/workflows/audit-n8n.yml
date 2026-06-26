@@ -125,7 +125,7 @@ jobs:
           github.ref == 'refs/heads/main'
         uses: actions/checkout@v4
         with:
-          repository: Jeffrey-Katindig_axosEnt/Github_workflow_endpoint
+          repository: Github_workflow_endpoint/Github_workflow_endpoint
           token: ${{ secrets.ENDPOINT_REPO_PAT }}
           path: endpoint
 
