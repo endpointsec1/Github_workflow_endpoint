@@ -1,6 +1,0 @@
-Last audit: 2026-06-26T17:39:21Z
-Source repo: endpointsec1/Github_workflow_endpoint
-Source commit: 677d40f3a24973793c0f629f3d6a0de7e198b548
-Verdict: FAIL
-Triggered by: endpointsec1
-Rules generated: 
