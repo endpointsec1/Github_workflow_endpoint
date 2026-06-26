@@ -1,34 +1,22 @@
-# =============================================================================
-# n8n Workflow Audit Pipeline
-# =============================================================================
-# Runs n8n_audit_v3.py against every workflow JSON in the workflows/ folder.
-# Produces an HTML report + JSON findings file.
-# Pushes results to the Github_workflow_endpoint repo in results/.
-# Blocks PR merges if the audit verdict is FAIL.
-# =============================================================================
-
 name: n8n Workflow Audit
 
 on:
-  # Trigger when workflow JSONs change
   push:
     paths:
       - "workflows/**/*.json"
     branches:
       - main
 
-  # Trigger on PRs that touch workflow JSONs
   pull_request:
     paths:
       - "workflows/**/*.json"
 
-  # Manual trigger (run anytime from the Actions tab)
   workflow_dispatch:
     inputs:
       workflow_file:
         description: >
           Specific workflow JSON to audit (e.g. workflows/my_workflow.json).
-          Leave blank to audit ALL files in workflows/.
+          Leave blank to audit ALL.
         required: false
         default: ""
 
@@ -42,157 +30,144 @@ jobs:
 
     steps:
 
-      # ── 1. Checkout the source repository ──
-      - name: Checkout source repository
+      # 1. Checkout source repo
+      - name: Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # ── 2. Set up Python ──
-      - name: Set up Python 3.12
+      # 2. Python setup
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
-      # ── 3. Determine which workflow files to audit ──
-      - name: Identify files to audit
+      # 3. Detect files
+      - name: Identify files
         id: detect
         run: |
-          # --- Manual trigger: specific file ---
           if [ -n "${{ github.event.inputs.workflow_file }}" ]; then
-            echo "${{ github.event.inputs.workflow_file }}" > /tmp/files_to_audit.txt
+            echo "${{ github.event.inputs.workflow_file }}" > files.txt
 
-          # --- Push: only changed JSONs ---
           elif [ "${{ github.event_name }}" = "push" ]; then
             git diff --name-only ${{ github.event.before }} ${{ github.sha }} \
-              -- 'workflows/**/*.json' > /tmp/files_to_audit.txt || true
+              -- 'workflows/**/*.json' > files.txt || true
 
-          # --- PR: files changed in the PR ---
           elif [ "${{ github.event_name }}" = "pull_request" ]; then
             git diff --name-only ${{ github.event.pull_request.base.sha }} \
-              ${{ github.sha }} -- 'workflows/**/*.json' > /tmp/files_to_audit.txt || true
-
-          # --- Fallback: audit everything ---
+              ${{ github.sha }} -- 'workflows/**/*.json' > files.txt || true
           else
-            find workflows -name '*.json' -type f > /tmp/files_to_audit.txt
+            find workflows -name '*.json' > files.txt
           fi
 
-          # Remove empty lines
-          sed -i '/^$/d' /tmp/files_to_audit.txt
+          sed -i '/^$/d' files.txt
 
-          FILE_COUNT=$(wc -l < /tmp/files_to_audit.txt | tr -d ' ')
-          echo "file_count=$FILE_COUNT" >> "$GITHUB_OUTPUT"
-          echo "::notice::Found $FILE_COUNT workflow file(s) to audit"
-          cat /tmp/files_to_audit.txt
+          COUNT=$(wc -l < files.txt | tr -d ' ')
+          echo "file_count=$COUNT" >> $GITHUB_OUTPUT
+          echo "::notice::Found $COUNT files"
+          cat files.txt
 
-      # ── 4. Run the audit script on each workflow file ──
-      - name: Run n8n_audit_v3.py
+      # 4. Run audit
+      - name: Run audit
         id: audit
         if: steps.detect.outputs.file_count != '0'
         run: |
-          # ← CHANGED: Write results to a dedicated path that won't get clobbered
-          mkdir -p ${{ runner.temp }}/audit-results
+          OUTDIR="${{ runner.temp }}/audit-results"
+          mkdir -p "$OUTDIR"
 
-          OVERALL_STATUS="PASS"
+          OVERALL="PASS"
 
-          while IFS= read -r wf_file; do
-            [ -z "$wf_file" ] && continue
-            if [ ! -f "$wf_file" ]; then
-              echo "::warning::File not found (may have been deleted): $wf_file"
-              continue
-            fi
+          while IFS= read -r wf; do
+            [ -z "$wf" ] && continue
+            [ ! -f "$wf" ] && continue
 
-            WF_NAME=$(basename "$wf_file" .json)
-            mkdir -p "${{ runner.temp }}/audit-results/$WF_NAME"
+            NAME=$(basename "$wf" .json)
+            mkdir -p "$OUTDIR/$NAME"
 
-            echo "::group::Auditing $wf_file"
+            echo "::group::$wf"
 
-            python3 scripts/n8n_audit_v3.py "$wf_file" \
-              -o "${{ runner.temp }}/audit-results/$WF_NAME/audit_report.html" \
-              --json "${{ runner.temp }}/audit-results/$WF_NAME/findings.json" \
-              -c "Axos" \
-              -c "AxosFinancial" \
-              && WF_STATUS="PASS" || WF_STATUS="FAIL"
+            python3 scripts/n8n_audit_v3.py "$wf" \
+              -o "$OUTDIR/$NAME/report.html" \
+              --json "$OUTDIR/$NAME/findings.json" \
+              -c "Axos" -c "AxosFinancial" \
+              && STATUS="PASS" || STATUS="FAIL"
 
-            echo "  → $WF_NAME: $WF_STATUS"
+            echo "$NAME → $STATUS"
 
-            if [ "$WF_STATUS" = "FAIL" ]; then
-              OVERALL_STATUS="FAIL"
+            if [ "$STATUS" = "FAIL" ]; then
+              OVERALL="FAIL"
             fi
 
             echo "::endgroup::"
-          done < /tmp/files_to_audit.txt
+          done < files.txt
 
-          echo "overall_status=$OVERALL_STATUS" >> "$GITHUB_OUTPUT"
-          echo "::notice::Overall audit verdict: $OVERALL_STATUS"
+          echo "overall_status=$OVERALL" >> $GITHUB_OUTPUT
+          echo "::notice::Overall: $OVERALL"
 
-          # ← CHANGED: Verify results were actually created
-          echo "::group::Audit output files"
-          find ${{ runner.temp }}/audit-results -type f
+          echo "::group::Files created"
+          find "$OUTDIR"
           echo "::endgroup::"
 
-      # ── 5. Upload results as a downloadable artifact ──
-      - name: Upload audit artifacts
+      # 5. Upload artifact
+      - name: Upload artifacts
         if: always() && steps.detect.outputs.file_count != '0'
         uses: actions/upload-artifact@v4
         with:
-          name: n8n-audit-results-${{ github.sha }}
-          path: ${{ runner.temp }}/audit-results/      # ← CHANGED: match new path
-          retention-days: 90
+          name: audit-${{ github.sha }}
+          path: ${{ runner.temp }}/audit-results/
+          retention-days: 30
 
-      # ── 6. Checkout the destination repo ──
-      # ← CHANGED: Runs on push to main AND manual triggers (workflow_dispatch)
-      - name: Checkout Github_workflow_endpoint
-        if: >-
+      # 6. Checkout endpoint repo
+      - name: Checkout endpoint repo
+        if: >
           steps.detect.outputs.file_count != '0' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-          (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+          github.ref == 'refs/heads/main'
         uses: actions/checkout@v4
         with:
           repository: Jeffrey-Katindig_axosEnt/Github_workflow_endpoint
           token: ${{ secrets.ENDPOINT_REPO_PAT }}
-          path: endpoint-repo
+          path: endpoint
 
-      # ── 7. Push results to Github_workflow_endpoint/results/ ──
-      - name: Push results to endpoint repo
-        if: >-
+      # 7. Push results
+      - name: Push results
+        if: >
           steps.detect.outputs.file_count != '0' &&
           (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
-          (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
+          github.ref == 'refs/heads/main'
         run: |
-          # Ensure the destination directory exists
-          mkdir -p endpoint-repo/results
+          SRC="${{ runner.temp }}/audit-results"
+          DEST="endpoint/results/$(date +%Y%m%d-%H%M%S)"
 
-          # ← CHANGED: Copy from the temp path (not from ./results/ which may not exist)
-          cp -r ${{ runner.temp }}/audit-results/* endpoint-repo/results/
+          mkdir -p "$DEST"
 
-          # Write traceability summary
-          cat > endpoint-repo/results/LAST_RUN.txt <<EOF
-          Last audit: $(date -u +%Y-%m-%dT%H:%M:%SZ)
-          Source repo: ${{ github.repository }}
-          Source commit: ${{ github.sha }}
-          Verdict: ${{ steps.audit.outputs.overall_status }}
-          Triggered by: ${{ github.actor }}
-          Event: ${{ github.event_name }}
+          # safer copy (handles empty + preserves structure)
+          cp -R "$SRC"/. "$DEST"/ || echo "Nothing to copy"
+
+          cat > "$DEST/LAST_RUN.txt" <<EOF
+          time=$(date -u)
+          repo=${{ github.repository }}
+          commit=${{ github.sha }}
+          status=${{ steps.audit.outputs.overall_status }}
+          actor=${{ github.actor }}
+          event=${{ github.event_name }}
           EOF
 
-          cd endpoint-repo
-          git config user.name  "n8n-auditor[bot]"
-          git config user.email "n8n-auditor[bot]@users.noreply.github.com"
+          cd endpoint
+          git config user.name "audit-bot"
+          git config user.email "bot@users.noreply.github.com"
 
           git add results/
-          git commit -m "audit: n8n workflow check — ${{ steps.audit.outputs.overall_status }} [${{ github.sha }}]" \
-            || echo "No changes to commit"
+          git commit -m "audit: ${{ steps.audit.outputs.overall_status }} ${{ github.sha }}" \
+            || echo "No changes"
+
           git push
 
-          # ← CHANGED: Verify push succeeded
-          echo "::notice::Results pushed to Github_workflow_endpoint/results/"
-
-      # ── 8. Gate: block PR merge if audit fails ──
-      - name: Gate — fail if audit verdict is FAIL
-        if: >-
+      # 8. PR gate
+      - name: Fail on audit FAIL
+        if: >
           steps.audit.outputs.overall_status == 'FAIL' &&
           github.event_name == 'pull_request'
         run: |
-          echo "::error::n8n workflow audit verdict is FAIL. Fix all HIGH findings before merging."
+          echo "::error::Audit failed"
           exit 1
