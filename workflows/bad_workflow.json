@@ -1,0 +1,34 @@
+{
+  "name": "Pull Customer Data (BAD)",
+  "nodes": [
+    {
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://api.acme.com/data",
+        "headerParameters": {
+          "parameters": [
+            { "name": "Authorization", "value": "Bearer sk-AbCdEf1234567890abcdef1234567890" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Set",
+      "type": "n8n-nodes-base.set",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "db_password", "value": "admin123" },
+            { "name": "aws_key", "value": "AKIAIOSFODNN7EXAMPLE" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "parameters": { "jsCode": "const email='ops@acme.com'; return items;" }
+    }
+  ]
+}

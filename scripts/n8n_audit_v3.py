@@ -1,0 +1,1464 @@
+#!/usr/bin/env python3
+"""
+n8n Workflow Auditor v2 (local Python edition)
+==============================================
+
+A static auditor for exported n8n workflow JSON files.
+
+Inspired by https://github.com/christinec-dev/n8n-Audit-Workflow, this v2:
+  - Runs entirely locally (no n8n API, no LLM calls required).
+  - Audits the workflow JSON itself (not execution history), so it works on
+    workflows that have never run.
+  - Reports the EXACT LINE NUMBER in the source JSON for every finding,
+    so issues are clickable / traceable.
+  - Emits a single self-contained styled HTML report.
+
+Categories audited (mapped to OWASP / OWASP-LLM where relevant):
+  1. Security & Secrets        (OWASP A02, A07)
+  2. Webhook / Trigger Hygiene (OWASP A01, A07)
+  3. AI / LLM Risks            (OWASP LLM Top 10)
+  4. Error Handling & Resilience
+  5. Readability / Naming
+  6. Structural / Static Analysis (unreachable nodes, disabled, pinData)
+  7. Repo Hygiene flags (pinData shipped, etc.)
+
+Usage:
+    python3 n8n_audit_v2.py <workflow.json> [-o report.html]
+
+Exit codes:
+    0  Verdict PASS
+    1  Verdict FAIL
+    2  Invalid input / parse error
+"""
+
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import math
+import os
+import re
+import sys
+from collections import defaultdict
+from dataclasses import dataclass, field, asdict
+from datetime import datetime, timezone
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+
+# ---------------------------------------------------------------------------
+# Data model
+# ---------------------------------------------------------------------------
+
+SEVERITY_ORDER = {"high": 0, "medium": 1, "low": 2, "info": 3}
+
+
+@dataclass
+class Finding:
+    category: str          # e.g. "Security"
+    severity: str          # "high" | "medium" | "low" | "info"
+    rule_id: str           # short stable id, e.g. "SEC-HARDCODED-OPENAI"
+    title: str             # human title
+    detail: str            # extra context / matched snippet
+    node_name: Optional[str]
+    node_type: Optional[str]
+    line: int              # 1-based line number in source JSON
+    col: int               # 1-based column
+    json_pointer: str      # RFC6901-ish pointer
+    recommendation: str
+    owasp: Optional[str] = None     # tag, e.g. "OWASP A02" or "OWASP LLM01"
+    confidence: str = "medium"      # low|medium|high (helps tame regex noise)
+
+
+# ---------------------------------------------------------------------------
+# Line-aware JSON loader
+# ---------------------------------------------------------------------------
+# We need to know the (line, col) of every value in the source file. The
+# stdlib json module doesn't expose that, so we do a lightweight scan.
+# Strategy: load JSON normally for structure, and separately build an index
+# that maps a JSON pointer to (line, col) by re-tokenizing the raw text.
+#
+# Implementation: parse with a tiny token walker that mirrors json.loads but
+# records positions. This is robust enough for n8n exports (which are valid
+# JSON) and avoids a 3rd-party dep.
+
+
+class _PosParser:
+    """Minimal JSON parser that records (line, col) for every node, keyed by
+    JSON pointer (RFC 6901). Only used to build a pointer -> position map."""
+
+    def __init__(self, text: str) -> None:
+        self.text = text
+        self.i = 0
+        self.line = 1
+        self.col = 1
+        self.positions: Dict[str, Tuple[int, int]] = {}
+
+    # ---- low level ----
+    def _peek(self) -> str:
+        return self.text[self.i] if self.i < len(self.text) else ""
+
+    def _advance(self) -> str:
+        ch = self.text[self.i]
+        self.i += 1
+        if ch == "\n":
+            self.line += 1
+            self.col = 1
+        else:
+            self.col += 1
+        return ch
+
+    def _skip_ws(self) -> None:
+        while self.i < len(self.text) and self.text[self.i] in " \t\r\n":
+            self._advance()
+
+    def _record(self, pointer: str, line: int, col: int) -> None:
+        # First occurrence wins (we record at value start, which is what we want).
+        if pointer not in self.positions:
+            self.positions[pointer] = (line, col)
+
+    # ---- value dispatch ----
+    def parse(self) -> None:
+        self._skip_ws()
+        self._parse_value("")
+        self._skip_ws()
+
+    def _parse_value(self, pointer: str) -> None:
+        self._skip_ws()
+        line, col = self.line, self.col
+        self._record(pointer, line, col)
+        ch = self._peek()
+        if ch == "{":
+            self._parse_object(pointer)
+        elif ch == "[":
+            self._parse_array(pointer)
+        elif ch == '"':
+            self._parse_string()
+        elif ch == "-" or ch.isdigit():
+            self._parse_number()
+        elif self.text.startswith("true", self.i):
+            for _ in range(4):
+                self._advance()
+        elif self.text.startswith("false", self.i):
+            for _ in range(5):
+                self._advance()
+        elif self.text.startswith("null", self.i):
+            for _ in range(4):
+                self._advance()
+        else:
+            # Unknown / malformed — bail by advancing once.
+            self._advance()
+
+    def _parse_object(self, pointer: str) -> None:
+        assert self._advance() == "{"
+        self._skip_ws()
+        if self._peek() == "}":
+            self._advance()
+            return
+        while True:
+            self._skip_ws()
+            if self._peek() != '"':
+                # Malformed; abort gracefully
+                return
+            key = self._parse_string_value()
+            self._skip_ws()
+            if self._peek() == ":":
+                self._advance()
+            child_ptr = f"{pointer}/{_escape_ptr(key)}"
+            self._parse_value(child_ptr)
+            self._skip_ws()
+            if self._peek() == ",":
+                self._advance()
+                continue
+            if self._peek() == "}":
+                self._advance()
+                return
+            # Malformed
+            return
+
+    def _parse_array(self, pointer: str) -> None:
+        assert self._advance() == "["
+        self._skip_ws()
+        idx = 0
+        if self._peek() == "]":
+            self._advance()
+            return
+        while True:
+            child_ptr = f"{pointer}/{idx}"
+            self._parse_value(child_ptr)
+            idx += 1
+            self._skip_ws()
+            if self._peek() == ",":
+                self._advance()
+                continue
+            if self._peek() == "]":
+                self._advance()
+                return
+            return
+
+    def _parse_string(self) -> None:
+        # consume "..."
+        self._parse_string_value()
+
+    def _parse_string_value(self) -> str:
+        assert self._advance() == '"'
+        out: List[str] = []
+        while self.i < len(self.text):
+            ch = self._advance()
+            if ch == "\\":
+                if self.i < len(self.text):
+                    nxt = self._advance()
+                    escapes = {
+                        '"': '"',
+                        "\\": "\\",
+                        "/": "/",
+                        "b": "\b",
+                        "f": "\f",
+                        "n": "\n",
+                        "r": "\r",
+                        "t": "\t",
+                    }
+                    if nxt in escapes:
+                        out.append(escapes[nxt])
+                    elif nxt == "u":
+                        hexs = ""
+                        for _ in range(4):
+                            if self.i < len(self.text):
+                                hexs += self._advance()
+                        try:
+                            out.append(chr(int(hexs, 16)))
+                        except ValueError:
+                            out.append("?")
+                    else:
+                        out.append(nxt)
+            elif ch == '"':
+                return "".join(out)
+            else:
+                out.append(ch)
+        return "".join(out)
+
+    def _parse_number(self) -> None:
+        while self.i < len(self.text) and self.text[self.i] in "-+0123456789.eE":
+            self._advance()
+
+
+def _escape_ptr(token: str) -> str:
+    return token.replace("~", "~0").replace("/", "~1")
+
+
+def build_position_index(raw_text: str) -> Dict[str, Tuple[int, int]]:
+    parser = _PosParser(raw_text)
+    try:
+        parser.parse()
+    except Exception:
+        pass
+    return parser.positions
+
+
+# ---------------------------------------------------------------------------
+# Helpers to locate nodes and inner values in the line index
+# ---------------------------------------------------------------------------
+
+
+def find_nodes_index(workflow: Dict[str, Any]) -> Dict[str, int]:
+    """Map node name -> index in workflow['nodes']."""
+    out: Dict[str, int] = {}
+    for idx, n in enumerate(workflow.get("nodes", []) or []):
+        name = n.get("name")
+        if name:
+            out[name] = idx
+    return out
+
+
+def node_pointer(node_index: int) -> str:
+    return f"/nodes/{node_index}"
+
+
+def deep_pointer(node_index: int, path: List[Any]) -> str:
+    seg = "/".join(_escape_ptr(str(p)) for p in path)
+    return f"/nodes/{node_index}/{seg}" if seg else f"/nodes/{node_index}"
+
+
+def lookup_pos(
+    pos_index: Dict[str, Tuple[int, int]],
+    pointer: str,
+    fallback_node_index: Optional[int] = None,
+) -> Tuple[int, int, str]:
+    """Resolve a pointer to (line, col, resolved_pointer), walking up if needed."""
+    if pointer in pos_index:
+        l, c = pos_index[pointer]
+        return l, c, pointer
+    # Walk up segments until something resolves.
+    parts = pointer.split("/")
+    while len(parts) > 1:
+        parts.pop()
+        candidate = "/".join(parts) or "/"
+        if candidate in pos_index:
+            l, c = pos_index[candidate]
+            return l, c, candidate
+    if fallback_node_index is not None:
+        np = node_pointer(fallback_node_index)
+        if np in pos_index:
+            l, c = pos_index[np]
+            return l, c, np
+    return 1, 1, ""
+
+
+# ---------------------------------------------------------------------------
+# Detection: Security / secrets
+# ---------------------------------------------------------------------------
+
+
+# Higher-precision secret patterns (precise > broad). Each has a
+# confidence and OWASP tag.
+SECRET_PATTERNS: List[Tuple[str, re.Pattern[str], str, str, str]] = [
+    # rule_id, regex, severity, confidence, description
+    ("SEC-OPENAI-KEY",   re.compile(r"\bsk-[A-Za-z0-9]{20,64}\b"),                 "high",   "high",   "Hardcoded OpenAI API key"),
+    ("SEC-OPENAI-PROJ",  re.compile(r"\bsk-proj-[A-Za-z0-9_\-]{20,}\b"),           "high",   "high",   "Hardcoded OpenAI project key"),
+    ("SEC-AWS-AKID",     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                       "high",   "high",   "Hardcoded AWS Access Key ID"),
+    ("SEC-AWS-SECRET",   re.compile(r"(?i)aws(.{0,20})?(secret|sk)[^A-Za-z0-9]{1,5}[A-Za-z0-9/+=]{40}"), "high", "medium", "Possible AWS secret access key"),
+    ("SEC-GOOGLE-KEY",   re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),                 "high",   "high",   "Hardcoded Google API key"),
+    ("SEC-SLACK-TOKEN",  re.compile(r"\bxox[baprs]-[0-9A-Za-z\-]{10,}\b"),          "high",   "high",   "Hardcoded Slack token"),
+    ("SEC-GH-PAT",       re.compile(r"\bghp_[A-Za-z0-9]{20,}\b"),                   "high",   "high",   "Hardcoded GitHub PAT"),
+    ("SEC-GH-OAUTH",     re.compile(r"\bgho_[A-Za-z0-9]{20,}\b"),                   "high",   "high",   "Hardcoded GitHub OAuth token"),
+    ("SEC-STRIPE-LIVE",  re.compile(r"\bsk_live_[0-9a-zA-Z]{24,}\b"),               "high",   "high",   "Hardcoded Stripe live key"),
+    ("SEC-STRIPE-TEST",  re.compile(r"\bsk_test_[0-9a-zA-Z]{24,}\b"),               "medium", "high",   "Hardcoded Stripe test key"),
+    ("SEC-BEARER",       re.compile(r"\bBearer\s+[A-Za-z0-9\.\-_]{20,}"),           "high",   "medium", "Hardcoded Bearer token"),
+    ("SEC-JWT",          re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b"), "high", "high", "Hardcoded JWT"),
+    ("SEC-PRIVATE-KEY",  re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |)PRIVATE KEY-----"), "high", "high", "Hardcoded private key"),
+    ("SEC-WEAK-PWD",     re.compile(r"(?i)(?:password|passwd|pwd)\s*[:=]\s*['\"]?(?:password|123456|qwerty|letmein|admin123|password123)['\"]?"), "high", "high", "Weak hardcoded password"),
+    ("SEC-EMAIL",        re.compile(r"\b[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}\b", re.I), "low",    "medium", "Hardcoded email address"),
+]
+
+# Keys whose VALUES are sensitive but legitimately stored in expressions.
+# We still flag them if they are literal (not `{{ ... }}` / `$credentials...`).
+SENSITIVE_VALUE_KEYS = re.compile(
+    r"^(authorization|apikey|api_key|token|secret|password|client_secret|access_token|refresh_token|x-api-key)$",
+    re.I,
+)
+
+
+def _is_expression(val: str) -> bool:
+    if not isinstance(val, str):
+        return False
+    return bool(re.search(r"\{\{.*?\}\}|^\=", val))
+
+
+def _is_credential_ref(val: str) -> bool:
+    return isinstance(val, str) and (
+        "$credentials" in val or "credentials." in val
+    )
+
+
+def shannon_entropy(s: str) -> float:
+    if not s:
+        return 0.0
+    freqs: Dict[str, int] = defaultdict(int)
+    for c in s:
+        freqs[c] += 1
+    n = len(s)
+    return -sum((c / n) * math.log2(c / n) for c in freqs.values())
+
+
+# ---------------------------------------------------------------------------
+# Walkers
+# ---------------------------------------------------------------------------
+
+
+def walk(value: Any, path: Optional[List[Any]] = None) -> Iterable[Tuple[List[Any], Any]]:
+    """Depth-first walk yielding (path, leaf_value) for primitive leaves and
+    also (path, value) for dicts so callers can inspect node-typed objects."""
+    if path is None:
+        path = []
+    if isinstance(value, dict):
+        yield path, value
+        for k, v in value.items():
+            yield from walk(v, path + [k])
+    elif isinstance(value, list):
+        for i, v in enumerate(value):
+            yield from walk(v, path + [i])
+    else:
+        yield path, value
+
+
+# ---------------------------------------------------------------------------
+# Per-category audits
+# ---------------------------------------------------------------------------
+
+
+def audit_security(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+    company_identifiers: List[str],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    nodes = workflow.get("nodes", []) or []
+    company_regexes = [
+        (c, re.compile(rf"\b{re.escape(c)}\b", re.I)) for c in company_identifiers if c
+    ]
+
+    for idx, node in enumerate(nodes):
+        name = node.get("name", f"<node {idx}>")
+        ntype = node.get("type", "")
+        params = node.get("parameters", {}) or {}
+
+        for path, leaf in walk(params, ["parameters"]):
+            if not isinstance(leaf, str):
+                continue
+            if _is_credential_ref(leaf):
+                continue
+
+            # Sensitive key with literal value
+            if (
+                len(path) >= 2
+                and isinstance(path[-1], str)
+                and SENSITIVE_VALUE_KEYS.match(str(path[-1]))
+                and leaf
+                and not _is_expression(leaf)
+                and not _is_credential_ref(leaf)
+            ):
+                ptr = deep_pointer(idx, path)
+                line, col, _ = lookup_pos(pos_index, ptr, idx)
+                findings.append(Finding(
+                    category="Security",
+                    severity="high",
+                    rule_id="SEC-SENSITIVE-KEY-LITERAL",
+                    title=f"Sensitive key '{path[-1]}' holds a literal value",
+                    detail=f"value preview: {leaf[:60]!r}",
+                    node_name=name, node_type=ntype,
+                    line=line, col=col, json_pointer=ptr,
+                    recommendation="Move this value to an n8n credential or env var; reference it via expression instead of hardcoding.",
+                    owasp="OWASP A02 (Cryptographic Failures) / A07 (Auth Failures)",
+                    confidence="high",
+                ))
+
+            # Pattern-based secret scanning
+            for rule_id, rx, sev, conf, desc in SECRET_PATTERNS:
+                m = rx.search(leaf)
+                if not m:
+                    continue
+                # Skip if value is purely an expression reference
+                if _is_expression(leaf) and "$credentials" in leaf:
+                    continue
+                ptr = deep_pointer(idx, path)
+                line, col, _ = lookup_pos(pos_index, ptr, idx)
+                findings.append(Finding(
+                    category="Security",
+                    severity=sev,
+                    rule_id=rule_id,
+                    title=desc,
+                    detail=f"matched: {m.group(0)[:80]}",
+                    node_name=name, node_type=ntype,
+                    line=line, col=col, json_pointer=ptr,
+                    recommendation="Rotate the credential immediately if real, and store via n8n credentials.",
+                    owasp="OWASP A02 / A07",
+                    confidence=conf,
+                ))
+
+            # High-entropy generic strings (only on long-ish, sensitive-looking keys/values)
+            if len(leaf) >= 30 and len(leaf) <= 200 and not _is_expression(leaf):
+                ent = shannon_entropy(leaf)
+                key_hint = str(path[-1]).lower() if path else ""
+                if ent >= 4.2 and any(
+                    h in key_hint for h in ("token", "key", "secret", "auth", "pwd", "password")
+                ):
+                    ptr = deep_pointer(idx, path)
+                    line, col, _ = lookup_pos(pos_index, ptr, idx)
+                    findings.append(Finding(
+                        category="Security",
+                        severity="medium",
+                        rule_id="SEC-HIGH-ENTROPY",
+                        title="High-entropy string in a credential-like field",
+                        detail=f"entropy={ent:.2f}, len={len(leaf)}",
+                        node_name=name, node_type=ntype,
+                        line=line, col=col, json_pointer=ptr,
+                        recommendation="Verify this is not a hardcoded secret; if so, move to credentials.",
+                        owasp="OWASP A02",
+                        confidence="medium",
+                    ))
+
+            # Company identifiers
+            for raw, rx in company_regexes:
+                if rx.search(leaf):
+                    ptr = deep_pointer(idx, path)
+                    line, col, _ = lookup_pos(pos_index, ptr, idx)
+                    findings.append(Finding(
+                        category="Security",
+                        severity="low",
+                        rule_id="SEC-COMPANY-ID",
+                        title=f"Company identifier '{raw}' found in workflow",
+                        detail=f"value preview: {leaf[:80]!r}",
+                        node_name=name, node_type=ntype,
+                        line=line, col=col, json_pointer=ptr,
+                        recommendation="Confirm this identifier is safe to ship; consider parameterizing.",
+                        owasp="OWASP A09 (Logging/Data exposure)",
+                        confidence="medium",
+                    ))
+
+    return findings
+
+
+def audit_webhooks(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    nodes = workflow.get("nodes", []) or []
+    for idx, node in enumerate(nodes):
+        ntype = (node.get("type") or "").lower()
+        name = node.get("name", "")
+        params = node.get("parameters", {}) or {}
+
+        is_webhook = "webhook" in ntype or ntype.endswith(".webhook")
+        is_form = "formtrigger" in ntype
+        if not (is_webhook or is_form):
+            continue
+
+        # Authentication
+        auth = (params.get("authentication") or "").lower() if isinstance(params.get("authentication"), str) else ""
+        ptr = deep_pointer(idx, ["parameters", "authentication"])
+        line, col, _ = lookup_pos(pos_index, ptr, idx)
+        if auth in ("", "none"):
+            findings.append(Finding(
+                category="Webhook Hygiene",
+                severity="high",
+                rule_id="WHK-NO-AUTH",
+                title=f"Webhook/trigger node '{name}' has no authentication",
+                detail=f"authentication = {auth!r}",
+                node_name=name, node_type=node.get("type"),
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Enable header/basic/JWT auth or signature verification (e.g. HMAC).",
+                owasp="OWASP A01 (Broken Access Control) / A07",
+                confidence="high",
+            ))
+
+        # respondWith / responseMode allowing arbitrary response without auth is risky
+        # Wildcard path
+        path_val = params.get("path")
+        if isinstance(path_val, str) and (path_val == "" or path_val == "/" or "*" in path_val):
+            ptr = deep_pointer(idx, ["parameters", "path"])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="Webhook Hygiene",
+                severity="medium",
+                rule_id="WHK-WILDCARD-PATH",
+                title=f"Webhook '{name}' uses an overly broad path",
+                detail=f"path = {path_val!r}",
+                node_name=name, node_type=node.get("type"),
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Use a specific, unguessable path; avoid wildcards on public webhooks.",
+                owasp="OWASP A01",
+                confidence="medium",
+            ))
+
+    return findings
+
+
+def audit_ai(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    nodes = workflow.get("nodes", []) or []
+    by_name = find_nodes_index(workflow)
+    connections = workflow.get("connections", {}) or {}
+
+    # Collect outgoing edges by source node -> list of targets
+    out_edges: Dict[str, List[str]] = defaultdict(list)
+    for src, conn in connections.items():
+        if not isinstance(conn, dict):
+            continue
+        for _kind, branches in conn.items():
+            if not isinstance(branches, list):
+                continue
+            for branch in branches:
+                if not isinstance(branch, list):
+                    continue
+                for tgt in branch:
+                    if isinstance(tgt, dict) and tgt.get("node"):
+                        out_edges[src].append(tgt["node"])
+
+    # Walk webhook/trigger nodes; BFS to any AI node => taint path
+    trigger_types = ("webhook", "formtrigger", "trigger")
+    triggers = [
+        n["name"] for n in nodes
+        if isinstance(n.get("type"), str)
+        and any(t in n["type"].lower() for t in trigger_types)
+    ]
+
+    ai_nodes = [
+        (idx, n) for idx, n in enumerate(nodes)
+        if isinstance(n.get("type"), str) and n["type"].startswith("@n8n/n8n-nodes-langchain")
+    ]
+
+    for idx, node in ai_nodes:
+        name = node.get("name", "")
+        ntype = node.get("type", "")
+        params = node.get("parameters", {}) or {}
+
+        # 1) Prompt-injection exposure: BFS from triggers to this node
+        if triggers:
+            visited = set()
+            stack = list(triggers)
+            reached = False
+            while stack:
+                cur = stack.pop()
+                if cur in visited:
+                    continue
+                visited.add(cur)
+                if cur == name:
+                    reached = True
+                    break
+                for nxt in out_edges.get(cur, []):
+                    stack.append(nxt)
+            if reached:
+                ptr = deep_pointer(idx, [])
+                line, col, _ = lookup_pos(pos_index, ptr, idx)
+                findings.append(Finding(
+                    category="AI / LLM",
+                    severity="high",
+                    rule_id="AI-PROMPT-INJECTION-PATH",
+                    title=f"Untrusted input may reach AI node '{name}'",
+                    detail="A trigger node has a directed path to this LLM node; inputs must be treated as untrusted.",
+                    node_name=name, node_type=ntype,
+                    line=line, col=col, json_pointer=ptr,
+                    recommendation="Sanitize / validate inputs, add a system-prompt guardrail, and apply an output filter.",
+                    owasp="OWASP LLM01 (Prompt Injection)",
+                    confidence="high",
+                ))
+
+        # 2) No output guardrail / no fallback
+        prompt_text = ""
+        if isinstance(params.get("text"), str):
+            prompt_text = params["text"]
+        elif isinstance(params.get("messages"), (dict, list)):
+            try:
+                prompt_text = json.dumps(params["messages"])
+            except Exception:
+                pass
+
+        if prompt_text and not re.search(r"(?i)do not|never|refuse|safe|guardrail|policy|filter", prompt_text):
+            ptr = deep_pointer(idx, ["parameters", "text"]) if "text" in params else deep_pointer(idx, ["parameters"])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="AI / LLM",
+                severity="medium",
+                rule_id="AI-NO-GUARDRAIL",
+                title=f"AI node '{name}' prompt has no obvious guardrail language",
+                detail="No 'do not', 'refuse', 'never', etc. detected in the prompt.",
+                node_name=name, node_type=ntype,
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Add explicit safety / refusal instructions and an output-validation step.",
+                owasp="OWASP LLM02 (Insecure Output Handling)",
+                confidence="medium",
+            ))
+
+        # 3) Token-bomb risk: prompt embedding full JSON / very long
+        if prompt_text and len(prompt_text) > 6000:
+            ptr = deep_pointer(idx, ["parameters", "text"]) if "text" in params else deep_pointer(idx, ["parameters"])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="AI / LLM",
+                severity="medium",
+                rule_id="AI-LARGE-PROMPT",
+                title=f"AI node '{name}' has a very large prompt template ({len(prompt_text)} chars)",
+                detail="Large prompts inflate token cost and risk truncation.",
+                node_name=name, node_type=ntype,
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Compress / chunk the input; consider RAG instead of inlining all data.",
+                owasp="OWASP LLM04 (Model DoS) / LLM10 (Model Theft via overload)",
+                confidence="medium",
+            ))
+
+        # 4) No retryOnFail set on LLM node
+        if node.get("retryOnFail") is not True:
+            ptr = deep_pointer(idx, [])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="AI / LLM",
+                severity="low",
+                rule_id="AI-NO-RETRY",
+                title=f"AI node '{name}' has no retryOnFail",
+                detail="LLM APIs frequently rate-limit / 5xx.",
+                node_name=name, node_type=ntype,
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Enable retryOnFail with a small delay; configure a fallback model.",
+                owasp="OWASP LLM04",
+                confidence="high",
+            ))
+
+    return findings
+
+
+RISKY_TYPE_PATTERNS: List[Tuple[re.Pattern[str], str]] = [
+    (re.compile(r"httpRequest", re.I), "Enable Retry on Fail, set a timeout, and consider Continue On Error."),
+    (re.compile(r"airtable|googleDocs|googleSheets|notion", re.I), "Validate record/document IDs before execution; add an Error Workflow."),
+    (re.compile(r"slack|telegram|discord|gmail|email|sendgrid", re.I), "External APIs can rate-limit; add Error Workflows + fallback channel."),
+    (re.compile(r"postgres|mysql|mongodb|redis|mssql|snowflake", re.I), "Wrap DB ops with Continue On Error and validate inputs."),
+    (re.compile(r"langchain|openAi|anthropic|mistral|cohere", re.I), "Configure retries, fallback model, and polling for long tasks."),
+    (re.compile(r"^n8n-nodes-base\.code$", re.I), "Custom Code nodes throw on runtime errors; wrap in try/catch and use Continue On Error."),
+]
+
+
+def audit_error_handling(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    nodes = workflow.get("nodes", []) or []
+    settings = workflow.get("settings", {}) or {}
+
+    # Global: no errorWorkflow
+    if not settings.get("errorWorkflow"):
+        ptr = "/settings"
+        line, col, _ = lookup_pos(pos_index, ptr)
+        findings.append(Finding(
+            category="Error Handling",
+            severity="high",
+            rule_id="ERR-NO-ERROR-WORKFLOW",
+            title="No Error Workflow configured",
+            detail="settings.errorWorkflow is empty.",
+            node_name=None, node_type=None,
+            line=line, col=col, json_pointer=ptr,
+            recommendation="Create an Error Trigger workflow that logs + notifies on failures, and attach it here.",
+            owasp=None,
+            confidence="high",
+        ))
+
+    for idx, node in enumerate(nodes):
+        ntype = node.get("type") or ""
+        name = node.get("name", "")
+        for rx, rec in RISKY_TYPE_PATTERNS:
+            if rx.search(ntype):
+                if node.get("retryOnFail") is not True and node.get("continueOnFail") is not True:
+                    ptr = deep_pointer(idx, [])
+                    line, col, _ = lookup_pos(pos_index, ptr, idx)
+                    findings.append(Finding(
+                        category="Error Handling",
+                        severity="medium",
+                        rule_id="ERR-NO-RETRY-OR-CONTINUE",
+                        title=f"Risky node '{name}' has neither retryOnFail nor continueOnFail",
+                        detail=f"type = {ntype}",
+                        node_name=name, node_type=ntype,
+                        line=line, col=col, json_pointer=ptr,
+                        recommendation=rec,
+                        confidence="high",
+                    ))
+                break
+
+    return findings
+
+
+def audit_readability(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    nodes = workflow.get("nodes", []) or []
+    seen_names: Dict[str, int] = defaultdict(int)
+
+    for idx, node in enumerate(nodes):
+        name = node.get("name") or ""
+        ntype = node.get("type") or ""
+        seen_names[name] += 1
+
+        unclear = (
+            not name
+            or re.match(r"^Node\d+$", name)
+            or len(name.strip()) < 3
+            or name.strip().lower() in ("untitled", "default")
+        )
+        if unclear:
+            ptr = deep_pointer(idx, ["name"])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="Readability",
+                severity="low",
+                rule_id="READ-UNCLEAR-NAME",
+                title=f"Unclear node name: {name!r}",
+                detail="Default or too-short name.",
+                node_name=name, node_type=ntype,
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Rename to a descriptive verb-noun phrase (e.g. 'Fetch Customers from API').",
+                confidence="high",
+            ))
+
+    for name, count in seen_names.items():
+        if count > 1 and name:
+            # find first occurrence index
+            for idx, node in enumerate(nodes):
+                if node.get("name") == name:
+                    ptr = deep_pointer(idx, ["name"])
+                    line, col, _ = lookup_pos(pos_index, ptr, idx)
+                    findings.append(Finding(
+                        category="Readability",
+                        severity="low",
+                        rule_id="READ-DUPLICATE-NAME",
+                        title=f"Duplicate node name '{name}' ({count} occurrences)",
+                        detail="",
+                        node_name=name, node_type=node.get("type"),
+                        line=line, col=col, json_pointer=ptr,
+                        recommendation="Give each node a unique name for unambiguous debugging.",
+                        confidence="high",
+                    ))
+                    break
+
+    return findings
+
+
+def audit_structural(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    nodes = workflow.get("nodes", []) or []
+    connections = workflow.get("connections", {}) or {}
+
+    names = {n.get("name") for n in nodes if n.get("name")}
+    # Set of nodes that are targets (have incoming edges)
+    incoming: set = set()
+    outgoing: set = set()
+    for src, conn in connections.items():
+        if src not in names:
+            continue
+        if not isinstance(conn, dict):
+            continue
+        for _kind, branches in conn.items():
+            if not isinstance(branches, list):
+                continue
+            for branch in branches:
+                if not isinstance(branch, list):
+                    continue
+                for tgt in branch:
+                    if isinstance(tgt, dict) and tgt.get("node"):
+                        incoming.add(tgt["node"])
+                        outgoing.add(src)
+
+    trigger_keywords = ("trigger", "webhook", "manualtrigger", "cron", "schedule")
+    for idx, node in enumerate(nodes):
+        name = node.get("name", "")
+        ntype = (node.get("type") or "").lower()
+        is_trigger = any(t in ntype for t in trigger_keywords)
+        is_sticky = "stickynote" in ntype
+        if is_sticky:
+            continue
+
+        # Unreachable: not a trigger AND has no incoming connection
+        if not is_trigger and name not in incoming:
+            ptr = deep_pointer(idx, [])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="Structural",
+                severity="medium",
+                rule_id="STR-UNREACHABLE",
+                title=f"Node '{name}' is unreachable (no incoming connections)",
+                detail=f"type = {node.get('type')}",
+                node_name=name, node_type=node.get("type"),
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Delete the node or connect it from upstream.",
+                confidence="medium",
+            ))
+
+        # Disabled nodes still shipped
+        if node.get("disabled") is True:
+            ptr = deep_pointer(idx, ["disabled"])
+            line, col, _ = lookup_pos(pos_index, ptr, idx)
+            findings.append(Finding(
+                category="Structural",
+                severity="low",
+                rule_id="STR-DISABLED-NODE",
+                title=f"Node '{name}' is disabled",
+                detail="",
+                node_name=name, node_type=node.get("type"),
+                line=line, col=col, json_pointer=ptr,
+                recommendation="Remove if dead code; document if intentional.",
+                confidence="high",
+            ))
+
+    return findings
+
+
+def audit_repo_hygiene(
+    workflow: Dict[str, Any],
+    pos_index: Dict[str, Tuple[int, int]],
+) -> List[Finding]:
+    findings: List[Finding] = []
+    if "pinData" in workflow and workflow["pinData"]:
+        ptr = "/pinData"
+        line, col, _ = lookup_pos(pos_index, ptr)
+        findings.append(Finding(
+            category="Hygiene",
+            severity="medium",
+            rule_id="HYG-PINDATA-SHIPPED",
+            title="Workflow exports pinned test data",
+            detail="`pinData` is present — importers will inherit stale fixtures.",
+            node_name=None, node_type=None,
+            line=line, col=col, json_pointer=ptr,
+            recommendation="Strip pinData before publishing the workflow JSON.",
+            confidence="high",
+        ))
+    return findings
+
+
+
+# ---------------------------------------------------------------------------
+# Verdict engine
+# ---------------------------------------------------------------------------
+#
+# A workflow PASSES when none of the FAIL conditions below are tripped.
+# Each FAIL condition produces a "reason" with detail + remediation steps,
+# so a FAIL verdict always tells you WHY and HOW TO FIX it.
+#
+# FAIL rules (a single match flips verdict to FAIL):
+#   F1. Any HIGH-severity finding exists.
+#   F2. >=5 MEDIUM-severity findings (death by a thousand cuts).
+#   F3. No Error Workflow configured (ERR-NO-ERROR-WORKFLOW).
+#   F4. Any webhook/trigger without auth (WHK-NO-AUTH).
+#   F5. Any AI node reachable from an untrusted trigger (AI-PROMPT-INJECTION-PATH).
+#   F6. Any hardcoded credential / sensitive literal
+#       (SEC-SENSITIVE-KEY-LITERAL or any SEC-*-KEY / SEC-PRIVATE-KEY / SEC-JWT / SEC-BEARER).
+#   F7. pinData shipped in the export (HYG-PINDATA-SHIPPED).
+#
+# Anything else -> PASS (possibly with advisories).
+
+
+HARDCODED_SECRET_RULE_IDS = {
+    "SEC-SENSITIVE-KEY-LITERAL",
+    "SEC-OPENAI-KEY", "SEC-OPENAI-PROJ", "SEC-AWS-AKID", "SEC-AWS-SECRET",
+    "SEC-GOOGLE-KEY", "SEC-SLACK-TOKEN", "SEC-GH-PAT", "SEC-GH-OAUTH",
+    "SEC-STRIPE-LIVE", "SEC-STRIPE-TEST", "SEC-BEARER", "SEC-JWT",
+    "SEC-PRIVATE-KEY", "SEC-WEAK-PWD",
+}
+
+
+@dataclass
+class VerdictReason:
+    code: str               # e.g. "F1"
+    title: str              # short reason
+    detail: str             # what was detected (counts / nodes / lines)
+    remediation: List[str]  # ordered remediation steps
+    finding_refs: List[Finding] = field(default_factory=list)
+
+
+@dataclass
+class Verdict:
+    status: str             # "PASS" or "FAIL"
+    summary: str
+    reasons: List[VerdictReason] = field(default_factory=list)
+    counts: Dict[str, int] = field(default_factory=dict)
+
+
+def evaluate_verdict(findings: List[Finding]) -> Verdict:
+    counts: Dict[str, int] = defaultdict(int)
+    for f in findings:
+        counts[f.severity] += 1
+    counts = dict(counts)
+
+    reasons: List[VerdictReason] = []
+
+    # F1 — HIGH findings
+    high = [f for f in findings if f.severity == "high"]
+    if high:
+        reasons.append(VerdictReason(
+            code="F1",
+            title=f"{len(high)} HIGH-severity finding(s) present",
+            detail="HIGH findings are release blockers regardless of category.",
+            remediation=[
+                "Open the Findings section below and resolve every HIGH item.",
+                "Re-run this auditor; the verdict should flip to PASS once all HIGH items are cleared.",
+            ],
+            finding_refs=high,
+        ))
+
+    # F2 — too many MEDIUMs
+    medium = [f for f in findings if f.severity == "medium"]
+    if len(medium) >= 5:
+        reasons.append(VerdictReason(
+            code="F2",
+            title=f"{len(medium)} MEDIUM-severity findings (threshold: 5)",
+            detail="A cluster of MEDIUM findings indicates systemic gaps (no retries, no error handling, weak hygiene).",
+            remediation=[
+                "Triage MEDIUM findings by category; treat each category as a single fix campaign.",
+                "Apply 'Retry on Fail' + 'Continue on Error' on all risky nodes (HTTP, DB, LLM).",
+                "Strip unused / disabled nodes; rename unclear ones.",
+            ],
+            finding_refs=medium,
+        ))
+
+    # F3 — no Error Workflow
+    no_err_wf = [f for f in findings if f.rule_id == "ERR-NO-ERROR-WORKFLOW"]
+    if no_err_wf:
+        reasons.append(VerdictReason(
+            code="F3",
+            title="No Error Workflow configured",
+            detail="Without an Error Workflow, runtime failures are silent — no alerts, no audit trail.",
+            remediation=[
+                "Create a dedicated Error Trigger workflow that logs the error payload and sends a notification (Slack/email/PagerDuty).",
+                "In Workflow Settings -> Error Workflow, select the workflow you just created.",
+                "Re-export and re-run the audit to confirm.",
+            ],
+            finding_refs=no_err_wf,
+        ))
+
+    # F4 — webhook without auth
+    open_webhooks = [f for f in findings if f.rule_id == "WHK-NO-AUTH"]
+    if open_webhooks:
+        reasons.append(VerdictReason(
+            code="F4",
+            title=f"{len(open_webhooks)} webhook/trigger node(s) without authentication",
+            detail="Public unauthenticated webhooks can be abused for spam, DoS, data poisoning, or as a pivot into downstream systems.",
+            remediation=[
+                "On each flagged Webhook node, set 'Authentication' to Header Auth / Basic Auth / JWT, or implement HMAC signature verification.",
+                "Rotate the webhook URL path to an unguessable value if it was ever public.",
+                "Add rate-limiting / IP allow-listing at the reverse proxy if exposed to the internet.",
+            ],
+            finding_refs=open_webhooks,
+        ))
+
+    # F5 — prompt injection path
+    pi_path = [f for f in findings if f.rule_id == "AI-PROMPT-INJECTION-PATH"]
+    if pi_path:
+        nodes = sorted({f.node_name or "?" for f in pi_path})
+        reasons.append(VerdictReason(
+            code="F5",
+            title=f"Untrusted input may reach {len(nodes)} AI node(s): {', '.join(nodes)}",
+            detail="A graph path exists from a trigger node to an LLM node. Anything a caller sends can influence the prompt (OWASP LLM01).",
+            remediation=[
+                "Sanitize and strictly validate all user-controlled fields before they reach the LLM (allowlist, length cap, type checks).",
+                "Use a system prompt that explicitly refuses to follow instructions found inside user data.",
+                "Add an output guardrail step (regex / classifier / second LLM judge) before any side-effecting action.",
+                "Where possible, place untrusted text inside a clearly delimited block and instruct the model to treat it as data only.",
+            ],
+            finding_refs=pi_path,
+        ))
+
+    # F6 — hardcoded credentials / sensitive literals
+    secret_hits = [f for f in findings if f.rule_id in HARDCODED_SECRET_RULE_IDS]
+    if secret_hits:
+        reasons.append(VerdictReason(
+            code="F6",
+            title=f"{len(secret_hits)} hardcoded credential/secret finding(s)",
+            detail="Secrets stored directly in workflow JSON travel with every export, every backup, and every git commit.",
+            remediation=[
+                "ROTATE the exposed credential immediately at the provider (assume it is leaked).",
+                "Recreate the credential inside n8n's credential store.",
+                "Replace the literal in the node with an expression that references the credential.",
+                "Add a pre-commit hook / CI step that runs this auditor or gitleaks to prevent recurrence.",
+            ],
+            finding_refs=secret_hits,
+        ))
+
+    # F7 — pinData
+    pin = [f for f in findings if f.rule_id == "HYG-PINDATA-SHIPPED"]
+    if pin:
+        reasons.append(VerdictReason(
+            code="F7",
+            title="pinData (test fixtures) is shipped in the workflow export",
+            detail="Importers inherit pinned test data, which masks real upstream values during testing and may leak data captured during development.",
+            remediation=[
+                "In the n8n UI, right-click each pinned node and 'Unpin Data' before exporting.",
+                "Alternatively, delete the top-level `pinData` key from the JSON before publishing.",
+            ],
+            finding_refs=pin,
+        ))
+
+    status = "FAIL" if reasons else "PASS"
+    if status == "PASS":
+        summary = (
+            f"All gating checks passed. "
+            f"Advisories: {counts.get('medium', 0)} medium, "
+            f"{counts.get('low', 0)} low, {counts.get('info', 0)} info."
+        )
+    else:
+        summary = (
+            f"Workflow failed {len(reasons)} gating check(s). "
+            f"Resolve every reason below and re-run."
+        )
+    return Verdict(status=status, summary=summary, reasons=reasons, counts=counts)
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
+
+def run_audit(
+    raw_text: str,
+    workflow: Dict[str, Any],
+    company_identifiers: List[str],
+) -> List[Finding]:
+    pos_index = build_position_index(raw_text)
+    findings: List[Finding] = []
+    findings += audit_security(workflow, pos_index, company_identifiers)
+    findings += audit_webhooks(workflow, pos_index)
+    findings += audit_ai(workflow, pos_index)
+    findings += audit_error_handling(workflow, pos_index)
+    findings += audit_readability(workflow, pos_index)
+    findings += audit_structural(workflow, pos_index)
+    findings += audit_repo_hygiene(workflow, pos_index)
+    # Stable sort: severity then line
+    findings.sort(key=lambda f: (SEVERITY_ORDER.get(f.severity, 9), f.line, f.rule_id))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# HTML rendering
+# ---------------------------------------------------------------------------
+
+
+def render_html(
+    findings: List[Finding],
+    raw_text: str,
+    workflow: Dict[str, Any],
+    input_path: str,
+    verdict: Verdict,
+) -> str:
+    # ----- Verdict section -----
+    def _verdict_block(v: Verdict) -> str:
+        status_cls = "pass" if v.status == "PASS" else "fail"
+        icon = "✅" if v.status == "PASS" else "❌"
+        if v.status == "PASS":
+            reasons_html = (
+                '<div class="verdict-passmsg">'
+                'No gating checks tripped. Review advisories below to keep the workflow healthy.'
+                '</div>'
+            )
+        else:
+            blocks = []
+            for r in v.reasons:
+                rems = "".join(f"<li>{html.escape(step)}</li>" for step in r.remediation)
+                refs = ""
+                if r.finding_refs:
+                    refs_links = " ".join(
+                        f'<a href="#{html.escape(fr.rule_id)}-{fr.line}">'
+                        f'{html.escape(fr.rule_id)}@L{fr.line}</a>'
+                        for fr in r.finding_refs[:25]
+                    )
+                    more = "" if len(r.finding_refs) <= 25 else f' <span class="muted">(+{len(r.finding_refs)-25} more)</span>'
+                    refs = f'<div class="reason-refs"><b>Evidence:</b> {refs_links}{more}</div>'
+                blocks.append(f"""
+<div class="reason">
+  <div class="reason-head">
+    <span class="reason-code">{html.escape(r.code)}</span>
+    <span class="reason-title">{html.escape(r.title)}</span>
+  </div>
+  <div class="reason-detail">{html.escape(r.detail)}</div>
+  <div><b>Remediation:</b></div>
+  <ol class="reason-rem">{rems}</ol>
+  {refs}
+</div>
+""")
+            reasons_html = '<div class="verdict-reasons">' + "".join(blocks) + '</div>'
+        return f"""
+<section class="verdict">
+  <div class="verdict-head">
+    <div class="verdict-status {status_cls}">{icon} {v.status}</div>
+    <div class="verdict-summary">{html.escape(v.summary)}</div>
+  </div>
+  {reasons_html}
+</section>
+"""
+
+    verdict_html = _verdict_block(verdict)
+
+    counts = defaultdict(int)
+    for f in findings:
+        counts[f.severity] += 1
+    by_cat: Dict[str, List[Finding]] = defaultdict(list)
+    for f in findings:
+        by_cat[f.category].append(f)
+
+    raw_lines = raw_text.splitlines()
+    total_lines = len(raw_lines)
+    wf_name = workflow.get("name", "<unnamed>")
+    node_count = len(workflow.get("nodes", []) or [])
+    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    def sev_badge(sev: str) -> str:
+        return f'<span class="badge sev-{sev}">{sev.upper()}</span>'
+
+    def snippet_for(line: int) -> str:
+        if line <= 0 or line > total_lines:
+            return ""
+        start = max(1, line - 1)
+        end = min(total_lines, line + 1)
+        out: List[str] = []
+        for ln in range(start, end + 1):
+            text = raw_lines[ln - 1]
+            cls = "snip-hit" if ln == line else "snip-ctx"
+            out.append(
+                f'<tr class="{cls}"><td class="lno">{ln}</td>'
+                f'<td><pre>{html.escape(text)}</pre></td></tr>'
+            )
+        return f'<table class="snippet">{"".join(out)}</table>'
+
+    rows_html: List[str] = []
+    for cat, fl in by_cat.items():
+        rows_html.append(f'<h2 id="cat-{html.escape(cat)}">{html.escape(cat)} '
+                         f'<small>({len(fl)} findings)</small></h2>')
+        for f in fl:
+            node_label = (
+                f'<code>{html.escape(f.node_name)}</code> '
+                f'<span class="muted">({html.escape(f.node_type or "")})</span>'
+                if f.node_name else '<span class="muted">workflow-level</span>'
+            )
+            owasp = f' <span class="tag">{html.escape(f.owasp)}</span>' if f.owasp else ""
+            rows_html.append(f"""
+<div class="finding sev-{f.severity}-border" id="{html.escape(f.rule_id)}-{f.line}">
+  <div class="finding-head">
+    {sev_badge(f.severity)}
+    <span class="rule-id">{html.escape(f.rule_id)}</span>
+    <span class="conf">conf: {html.escape(f.confidence)}</span>
+    {owasp}
+    <a class="anchor" href="#{html.escape(f.rule_id)}-{f.line}">#</a>
+  </div>
+  <div class="finding-title">{html.escape(f.title)}</div>
+  <div class="finding-meta">
+    <span><b>Node:</b> {node_label}</span>
+    <span><b>Line:</b> <a class="lineref" href="#L{f.line}">{f.line}</a>:{f.col}</span>
+    <span><b>JSON pointer:</b> <code>{html.escape(f.json_pointer)}</code></span>
+  </div>
+  {f'<div class="finding-detail">{html.escape(f.detail)}</div>' if f.detail else ''}
+  <div class="finding-rec"><b>Recommendation:</b> {html.escape(f.recommendation)}</div>
+  {snippet_for(f.line)}
+</div>
+""")
+
+    # Full source listing with line anchors so #L<n> works
+    src_rows = "\n".join(
+        f'<tr id="L{i+1}"><td class="lno">{i+1}</td><td><pre>{html.escape(line)}</pre></td></tr>'
+        for i, line in enumerate(raw_lines)
+    )
+
+    css = """
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+       margin: 0; background: #f7f8fa; color: #1f2328; }
+header { background: linear-gradient(135deg,#0d1117,#1f2937); color: #fff; padding: 24px 32px; }
+header h1 { margin: 0 0 4px; font-size: 22px; }
+header .sub { opacity: .8; font-size: 13px; }
+main { max-width: 1200px; margin: 0 auto; padding: 24px 32px 80px; }
+section.summary { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+                  padding: 16px 20px; margin-bottom: 24px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.kpis { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; }
+.kpi { padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: 13px; }
+.kpi.high { background: #fde2e1; color: #8a1f1f; }
+.kpi.medium { background: #ffe9c2; color: #7a4a00; }
+.kpi.low { background: #d8efd8; color: #1f5a23; }
+.kpi.info { background: #e1ecff; color: #1f3d7a; }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+         font-weight: 700; letter-spacing: .04em; vertical-align: middle; }
+.sev-high { background: #d12a2a; color: #fff; }
+.sev-medium { background: #d18a2a; color: #fff; }
+.sev-low { background: #2a8a3a; color: #fff; }
+.sev-info { background: #2a5ed1; color: #fff; }
+.tag { background: #eef0f3; color: #1f2328; padding: 2px 8px; border-radius: 4px;
+       font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.muted { color: #6b7280; }
+.finding { background: #fff; border: 1px solid #e3e6ea; border-left-width: 4px;
+           border-radius: 10px; padding: 14px 16px; margin: 12px 0;
+           box-shadow: 0 1px 2px rgba(0,0,0,.03); }
+.sev-high-border { border-left-color: #d12a2a; }
+.sev-medium-border { border-left-color: #d18a2a; }
+.sev-low-border { border-left-color: #2a8a3a; }
+.sev-info-border { border-left-color: #2a5ed1; }
+.finding-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.rule-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+           background: #f1f3f5; padding: 2px 6px; border-radius: 4px; color: #444; }
+.conf { font-size: 11px; color: #6b7280; }
+.anchor { margin-left: auto; color: #94a3b8; text-decoration: none; font-size: 14px; }
+.finding-title { margin: 8px 0 4px; font-weight: 600; font-size: 15px; }
+.finding-meta { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px;
+                color: #4b5563; margin-bottom: 6px; }
+.finding-meta code { font-size: 11px; }
+.finding-detail { font-size: 12px; color: #374151; margin: 6px 0;
+                  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.finding-rec { font-size: 13px; background: #f8fafc; border: 1px solid #e3e6ea;
+               border-radius: 6px; padding: 8px 10px; margin-top: 6px; }
+table.snippet { width: 100%; border-collapse: collapse; margin-top: 10px;
+                background: #0d1117; color: #e6edf3; border-radius: 8px; overflow: hidden;
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.snippet td { padding: 2px 8px; vertical-align: top; }
+table.snippet td.lno { width: 60px; text-align: right; color: #7d8590;
+                       background: #161b22; user-select: none; }
+table.snippet tr.snip-hit td { background: rgba(255, 200, 0, .12); color: #f6e7a3; }
+table.snippet pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+nav.toc { position: sticky; top: 0; background: #fff; border-bottom: 1px solid #e3e6ea;
+          padding: 10px 32px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+nav.toc a { color: #1f3d7a; text-decoration: none; }
+nav.toc a:hover { text-decoration: underline; }
+details.source { margin-top: 32px; }
+details.source summary { cursor: pointer; font-weight: 600; padding: 8px 0; }
+table.source { width: 100%; border-collapse: collapse; background: #0d1117;
+               color: #e6edf3; border-radius: 8px; overflow: hidden;
+               font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+table.source td { padding: 1px 8px; vertical-align: top; }
+table.source td.lno { width: 60px; text-align: right; color: #7d8590;
+                      background: #161b22; user-select: none; }
+table.source pre { margin: 0; white-space: pre-wrap; word-break: break-all; }
+table.source tr:target td { background: rgba(255, 200, 0, .25); }
+
+/* Verdict */
+.verdict { background: #fff; border: 1px solid #e3e6ea; border-radius: 12px;
+           padding: 18px 22px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+.verdict-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.verdict-status { display: inline-flex; align-items: center; gap: 8px;
+                  padding: 8px 16px; border-radius: 999px; font-size: 18px;
+                  font-weight: 800; letter-spacing: .08em; }
+.verdict-status.pass { background: #1f8a3a; color: #fff; }
+.verdict-status.fail { background: #c0252b; color: #fff; }
+.verdict-summary { color: #1f2328; font-size: 14px; }
+.verdict-reasons { margin-top: 16px; display: grid; gap: 12px; }
+.reason { border: 1px solid #f0c0c2; background: #fff5f5; border-left: 4px solid #c0252b;
+          border-radius: 8px; padding: 12px 14px; }
+.reason-head { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.reason-code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+               background: #c0252b; color: #fff; padding: 2px 8px; border-radius: 4px;
+               font-size: 11px; font-weight: 700; }
+.reason-title { font-weight: 700; font-size: 14px; color: #1f2328; }
+.reason-detail { color: #4b5563; font-size: 13px; margin: 6px 0 10px; }
+.reason-rem { margin: 0 0 6px; padding-left: 20px; font-size: 13px; }
+.reason-rem li { margin: 2px 0; }
+.reason-refs { margin-top: 8px; font-size: 12px; }
+.reason-refs a { color: #c0252b; text-decoration: none; margin-right: 8px; }
+.reason-refs a:hover { text-decoration: underline; }
+.verdict-passmsg { color: #1f5a23; font-size: 13px; margin-top: 10px; }
+
+footer { color: #6b7280; font-size: 12px; padding: 24px 32px 48px; text-align: center; }
+"""
+
+    cat_links = " &middot; ".join(
+        f'<a href="#cat-{html.escape(c)}">{html.escape(c)} ({len(by_cat[c])})</a>'
+        for c in by_cat
+    ) or "<span class='muted'>No findings 🎉</span>"
+
+    html_out = f"""<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<title>n8n Workflow Audit Report — {html.escape(wf_name)}</title>
+<style>{css}</style>
+</head><body>
+<header>
+  <h1>n8n Workflow Audit Report</h1>
+  <div class="sub">
+    Workflow: <b>{html.escape(wf_name)}</b> &middot;
+    File: <code>{html.escape(os.path.basename(input_path))}</code> &middot;
+    Nodes: {node_count} &middot;
+    Generated: {generated}
+  </div>
+</header>
+<nav class="toc">{cat_links}</nav>
+<main>
+  {verdict_html}
+  <section class="summary">
+    <div><b>Summary</b></div>
+    <div class="kpis">
+      <div class="kpi high">High: {counts['high']}</div>
+      <div class="kpi medium">Medium: {counts['medium']}</div>
+      <div class="kpi low">Low: {counts['low']}</div>
+      <div class="kpi info">Info: {counts['info']}</div>
+      <div class="kpi" style="background:#eef0f3;color:#1f2328;">Total: {len(findings)}</div>
+    </div>
+  </section>
+
+  {''.join(rows_html) if findings else '<p>No findings. Workflow looks clean against the v2 ruleset.</p>'}
+
+  <details class="source">
+    <summary>Full source ({total_lines} lines) — click line numbers in findings above to jump here</summary>
+    <table class="source">{src_rows}</table>
+  </details>
+</main>
+<footer>
+  n8n Workflow Auditor v2 (local) &middot; static analysis &middot; line-accurate findings.
+</footer>
+</body></html>
+"""
+    return html_out
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def main(argv: Optional[List[str]] = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="n8n Workflow Auditor v2 — static analysis with line numbers."
+    )
+    parser.add_argument("workflow", help="Path to exported n8n workflow JSON.")
+    parser.add_argument(
+        "-o", "--output", default="audit_report.html",
+        help="Output HTML path (default: audit_report.html)",
+    )
+    parser.add_argument(
+        "-c", "--company-id", action="append", default=[],
+        help="Company identifier to flag (repeatable).",
+    )
+    parser.add_argument(
+        "--json", dest="json_out", default=None,
+        help="Also write findings as JSON to this path.",
+    )
+    args = parser.parse_args(argv)
+
+    try:
+        with open(args.workflow, "r", encoding="utf-8") as fh:
+            raw_text = fh.read()
+    except OSError as e:
+        print(f"ERROR: cannot read {args.workflow}: {e}", file=sys.stderr)
+        return 2
+
+    try:
+        workflow = json.loads(raw_text)
+    except json.JSONDecodeError as e:
+        print(f"ERROR: invalid JSON: {e}", file=sys.stderr)
+        return 2
+
+    findings = run_audit(raw_text, workflow, args.company_id)
+    verdict = evaluate_verdict(findings)
+    html_out = render_html(findings, raw_text, workflow, args.workflow, verdict)
+
+    with open(args.output, "w", encoding="utf-8") as fh:
+        fh.write(html_out)
+
+    if args.json_out:
+        with open(args.json_out, "w", encoding="utf-8") as fh:
+            json.dump({
+                "verdict": {
+                    "status": verdict.status,
+                    "summary": verdict.summary,
+                    "counts": verdict.counts,
+                    "reasons": [
+                        {
+                            "code": r.code,
+                            "title": r.title,
+                            "detail": r.detail,
+                            "remediation": r.remediation,
+                            "evidence": [
+                                {"rule_id": fr.rule_id, "line": fr.line, "node": fr.node_name}
+                                for fr in r.finding_refs
+                            ],
+                        }
+                        for r in verdict.reasons
+                    ],
+                },
+                "findings": [asdict(f) for f in findings],
+            }, fh, indent=2)
+
+    c = verdict.counts
+    print(
+        f"Audited {args.workflow}: "
+        f"VERDICT={verdict.status} | "
+        f"{c.get('high', 0)} high, {c.get('medium', 0)} medium, "
+        f"{c.get('low', 0)} low, {c.get('info', 0)} info. "
+        f"-> {args.output}"
+    )
+    if verdict.status == "FAIL":
+        print(f"  {verdict.summary}")
+        for r in verdict.reasons:
+            print(f"    [{r.code}] {r.title}")
+    return 1 if verdict.status == "FAIL" else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

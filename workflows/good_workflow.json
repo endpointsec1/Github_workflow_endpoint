@@ -1,0 +1,26 @@
+{
+  "name": "Sentiment Pipeline (GOOD)",
+  "nodes": [
+    {
+      "name": "Fetch Customer Records (Airtable)",
+      "type": "n8n-nodes-base.airtable",
+      "parameters": { "operation": "search", "base": "appXXXXXXXXXXXXXX" },
+      "credentials": { "airtableApi": { "id": "1", "name": "Airtable account" } },
+      "retryOnFail": true
+    },
+    {
+      "name": "Classify Sentiment (OpenAI)",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "parameters": { "model": "gpt-4o-mini" },
+      "credentials": { "openAiApi": { "id": "2", "name": "OpenAi account" } },
+      "retryOnFail": true
+    },
+    {
+      "name": "Write Report to Google Docs",
+      "type": "n8n-nodes-base.googleDocs",
+      "parameters": { "operation": "update" },
+      "credentials": { "googleDocsOAuth2Api": { "id": "3", "name": "Google Docs" } },
+      "continueOnFail": true
+    }
+  ]
+}
