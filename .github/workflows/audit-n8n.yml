@@ -2,8 +2,8 @@
 # n8n Workflow Audit Pipeline
 # =============================================================================
 # Runs n8n_audit_v3.py against every workflow JSON in the workflows/ folder.
-# Produces an HTML report + JSON findings file in results/.
-# Commits the results back to the same repo on push to main.
+# Produces an HTML report + JSON findings file.
+# Pushes results to the Github_workflow_endpoint repo in results/.
 # Blocks PR merges if the audit verdict is FAIL.
 # =============================================================================
 
@@ -33,7 +33,7 @@ on:
         default: ""
 
 permissions:
-  contents: write    # Needed to commit results back to the repo
+  contents: read    # This repo only needs read (we push to the other repo via PAT)
 
 jobs:
   audit:
@@ -42,8 +42,8 @@ jobs:
 
     steps:
 
-      # ── 1. Checkout the repository ──
-      - name: Checkout repository
+      # ── 1. Checkout the source repository ──
+      - name: Checkout source repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0    # Full history for git diff change detection
@@ -137,27 +137,44 @@ jobs:
           path: results/
           retention-days: 90
 
-      # ── 6. Commit results back to the repo (main branch only) ──
-      - name: Commit results to repo
+      # ── 6. Checkout the destination repo ──
+      - name: Checkout Github_workflow_endpoint
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@v4
+        with:
+          repository: Jeffrey-Katindig_axosEnt/Github_workflow_endpoint
+          token: ${{ secrets.ENDPOINT_REPO_PAT }}
+          path: endpoint-repo
+
+      # ── 7. Push results to Github_workflow_endpoint/results/ ──
+      - name: Push results to endpoint repo
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
-          git config user.name  "n8n-auditor[bot]"
-          git config user.email "n8n-auditor[bot]@users.noreply.github.com"
+          # Ensure the results directory exists in the destination repo
+          mkdir -p endpoint-repo/results
 
-          # Write a summary file for quick reference
-          cat > results/LAST_RUN.txt <<EOF
+          # Copy all audit output into the destination
+          cp -r results/* endpoint-repo/results/
+
+          # Write a summary file for traceability
+          cat > endpoint-repo/results/LAST_RUN.txt <<EOF
           Last audit: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          Source repo: ${{ github.repository }}
           Source commit: ${{ github.sha }}
           Verdict: ${{ steps.audit.outputs.overall_status }}
           Triggered by: ${{ github.actor }}
           EOF
+
+          cd endpoint-repo
+          git config user.name  "n8n-auditor[bot]"
+          git config user.email "n8n-auditor[bot]@users.noreply.github.com"
 
           git add results/
           git commit -m "audit: n8n workflow check — ${{ steps.audit.outputs.overall_status }} [${{ github.sha }}]" \
             || echo "No changes to commit"
           git push
 
-      # ── 7. Gate: block PR merge if audit fails ──
+      # ── 8. Gate: block PR merge if audit fails ──
       - name: Gate — fail if audit verdict is FAIL
         if: >-
           steps.audit.outputs.overall_status == 'FAIL' &&
