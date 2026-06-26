@@ -126,7 +126,7 @@ jobs:
           (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch')
         uses: actions/checkout@v4
         with:
-          repository: Jeffrey-Katindig_axosEnt/Github_workflow_endpoint
+          repository: endpointsec1/Github_workflow_endpoint
           token: ${{ secrets.ENDPOINT_REPO_PAT }}
           path: endpoint-repo
 
