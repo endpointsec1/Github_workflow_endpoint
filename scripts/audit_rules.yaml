@@ -1,12 +1,12 @@
 # =============================================================================
 # n8n Audit Rules Configuration (AUTO-GENERATED — hardened updater)
 # =============================================================================
-# Generated: 2026-06-26T19:59:19Z
+# Generated: 2026-07-01T14:04:05Z
 # Do NOT edit manually. Run 'python scripts/update_rules.py' to regenerate.
 # =============================================================================
 
-version: "auto-2026-06-26"
-generated_at: "2026-06-26T19:59:19Z"
+version: "auto-2026-07-01"
+generated_at: "2026-07-01T14:04:05Z"
 generated_by: "update_rules.py (hardened v2)"
 degraded_run: false
 
@@ -34,7 +34,7 @@ provenance:
       url: "https://genai.owasp.org/llm-top-10/"
       ok: true
       used_fallback: false
-      sha256: 8c8a23f8e11099105c9ad93d33747f494ee4981019da7985df2879ed2cef7221
+      sha256: b73030779cf8f73cb2e975a2cd51e83c06733cf4d1861ad44d7e961f71f93728
       count: 10
     atlas_stix:
       url: "https://raw.githubusercontent.com/mitre-atlas/atlas-navigator-data/main/dist/stix-atlas.json"
